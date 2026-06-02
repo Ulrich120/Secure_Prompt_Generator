@@ -1,0 +1,10 @@
+TITLE: Secure Login System
+
+PROMPT: Generate a Secure Login System using JWT authentification
+
+Requirements:
+- password hashing
+- Secure sessions
+- rate limiting
+- CSRF protection
+- OWASP compliance

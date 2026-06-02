@@ -1,0 +1,19 @@
+const express = require("express");
+
+const app = express();
+
+app.get("/login", (req, res) => {
+
+    const username = req.query.username;
+    const password = req.query.password;
+
+    if(username === "admin" && password === "1234") {
+
+        res.send("Connected");
+    } else {
+
+        res.send("Invalid credentials");
+    }
+});
+
+app.listen(3000);
