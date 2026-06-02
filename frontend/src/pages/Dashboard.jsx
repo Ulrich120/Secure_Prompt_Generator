@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 
 import { exportSecurityReport } from "../utils/pdfExporter";
 import SecurityRadar from "../components/SecurityRadar";
+import AttackCards from "../components/AttackCards";
 
 import { buildPrompt } from "../utils/promptBuilder";
 import { runPromptChain } from "../utils/promptChain";
@@ -227,10 +228,9 @@ export default function Dashboard() {
                   font-semibold
                   text-white
 
-                  ${
-                    selectedScenario?.id === scenario.id
-                      ? "bg-blue-500 hover:bg-blue-600"
-                      : "bg-gray-500 hover:bg-gray-600"
+                  ${selectedScenario?.id === scenario.id
+                    ? "bg-blue-500 hover:bg-blue-600"
+                    : "bg-gray-500 hover:bg-gray-600"
                   }
                 `}
               >
@@ -350,7 +350,7 @@ export default function Dashboard() {
           <SecurityRadar
             securityScore={securityScore}
             metrics={securityMetrics}
-            // riskLevel={riskLevel}
+          // riskLevel={riskLevel}
           />
 
           {/* RESPONSE PANEL */}
@@ -409,12 +409,11 @@ export default function Dashboard() {
                       text-white
                       font-bold
 
-                      ${
-                        securityScore >= 80
-                          ? "bg-green-500"
-                          : securityScore >= 60
-                            ? "bg-yellow-500"
-                            : "bg-red-500"
+                      ${securityScore >= 80
+                        ? "bg-green-500"
+                        : securityScore >= 60
+                          ? "bg-yellow-500"
+                          : "bg-red-500"
                       }
                     `}
                   >
@@ -430,12 +429,11 @@ export default function Dashboard() {
                       text-white
                       font-bold
 
-                      ${
-                        riskLevel === "Low"
-                          ? "bg-green-500"
-                          : riskLevel === "Medium"
-                            ? "bg-yellow-500"
-                            : "bg-red-500"
+                      ${riskLevel === "Low"
+                        ? "bg-green-500"
+                        : riskLevel === "Medium"
+                          ? "bg-yellow-500"
+                          : "bg-red-500"
                       }
                     `}
                   >
@@ -501,11 +499,12 @@ export default function Dashboard() {
                     bg-white
                     border
                     rounded-xl
-                  "
+                    "
                 >
-                  <h3 className="font-bold mb-2">{step.step || step.title}</h3>
+                  <h3 className="font-bold mb-2">
+                    {step.step || step.title}
+                  </h3>
 
-                  {/*EXCUTION TIME*/}
                   {step.executionTime && (
                     <div className="text-xs text-gray-500 mb-3">
                       Execution Time: {step.executionTime}s
@@ -515,6 +514,10 @@ export default function Dashboard() {
                   <div className="prose max-w-none">
                     <MarkdownRenderer content={step.content} />
                   </div>
+
+                  {step.title === "Attack Simulation" && (
+                    <AttackCards content={step.content} />
+                  )}
                 </div>
               ))}
 
