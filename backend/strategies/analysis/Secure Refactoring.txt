@@ -1,0 +1,26 @@
+Refactor the generated code to improve security, maintainability, and robustness.
+
+Objectives:
+
+- Eliminate insecure coding patterns
+- Reduce attack surface
+- Improve input validation
+- Improve authentication and authorization logic
+- Secure sensitive data handling
+- Apply OWASP secure coding practices
+- Improve error handling
+- Remove redundant or vulnerable logic
+
+Ensure:
+
+- Cleaner architecture
+- Secure dependencies usage
+- Principle of least privilege
+- Secure session management
+- Proper encryption practices
+
+Provide:
+
+- Improved secure code
+- Explanation of security improvements
+- Refactoring justification

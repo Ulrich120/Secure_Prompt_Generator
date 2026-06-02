@@ -1,0 +1,9 @@
+TITLE: Database Web Application
+
+PROMPT: Analyze a web application interacting with a SQL Database.
+
+Detect: 
+- SQL injection vulnerabilities
+- insecure queries
+- unsafe authentification
+- privilege escalation risk
