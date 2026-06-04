@@ -52,7 +52,7 @@ export async function runPromptChain({
 
   selectedStrategies,
 
-  selectedModel,
+  selectedModels,
 
 }) {
 
@@ -64,7 +64,7 @@ export async function runPromptChain({
 
       strategies: selectedStrategies,
 
-      fetchLLM: (prompt) => fetchLLM(prompt, selectedModel),
+      fetchLLM: (prompt) => fetchLLM(prompt, selectedModels?.[0] || "llama3"),
     });
 
   } catch (error) {
