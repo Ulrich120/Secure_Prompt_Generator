@@ -2,10 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 
 import { exportSecurityReport } from "../utils/pdfExporter";
-import { generateRecommendations } from "../utils/recommendationEngine";
 import SecurityRadar from "../components/SecurityRadar";
-import AttackCards from "../components/AttackCards";
-import VulnerabilityChart from "../components/VulnerabilityChart";
 
 import { buildPrompt } from "../utils/promptBuilder";
 import { runPromptChain } from "../utils/promptChain";
@@ -26,12 +23,9 @@ export default function Dashboard() {
 
   const [loadingScenarios, setLoadingScenarios] = useState(false);
 
-  const [llmResponse, setLlmResponse] = useState("");
-  const [selectedModels, setSelectedModels] = useState(["llama3"]);
-  const [modelComparisons, setModelComparisons] = useState([]);
-  const [selectedRadarModels, setSelectedRadarModels] = useState("llama3");
-  const [selectedRadarMetrics, setSelectedRadarMetrics] = useState(null);
+  const [selectedModel, setSelectedModel] = useState("llama3");
 
+  const [llmResponse, setLlmResponse] = useState("");
   const [loading, setLoading] = useState(false);
 
   const [securityMetrics, setSecurityMetrics] = useState({
@@ -116,112 +110,6 @@ export default function Dashboard() {
     history,
   });
 
-  // MODEL TOGGLE
-  const toggleModel = (model) => {
-    setSelectedModels((prev) => {
-      if (prev.includes(model) && prev.length === 1) {
-        return prev;
-      }
-
-      return prev.includes(model)
-        ? prev.filter((m) => m !== model)
-        : [...prev, model];
-    });
-  };
-
-  // MODEL COMPARISON
-  const runModelComparison = async (prompt) => {
-    const models = selectedModels;
-
-    const results = [];
-
-    for (const model of models) {
-      try {
-        const start = performance.now();
-
-        const response = await fetch("http://localhost:11434/api/generate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            prompt,
-            stream: false,
-          }),
-        });
-
-        const data = await response.json();
-
-        const end = performance.now();
-
-        const executionTime = (end - start) / 1000;
-
-        const responseLength = data.response.length;
-
-        const vulnerabilityCount = (
-          data.response.match(/critical|high|medium|low/gi) || []
-        ).length;
-
-        let metrics = {
-          authentication: 0,
-          authorization: 0,
-          input_validation: 0,
-          secret_management: 0,
-          logging: 0,
-        };
-
-        try {
-          const jsonMatch = data.response.match(/\{[\s\S]*?\}/);
-
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-
-            metrics = {
-              authentication: parsed.authentication || 0,
-              authorization: parsed.authorization || 0,
-              input_validation: parsed.input_validation || 0,
-              secret_management: parsed.secret_management || 0,
-              logging: parsed.logging || 0,
-            };
-          }
-        } catch (error) {
-          console.error("Metrics parse error:", error);
-        }
-
-        const score = Math.round(
-          (metrics.authentication +
-            metrics.authorization +
-            metrics.input_validation +
-            metrics.secret_management +
-            metrics.logging) / 5
-        );
-
-        results.push({
-          model,
-          executionTime,
-          responseLength,
-          vulnerabilityCount,
-          score,
-          response: data.response,
-          metrics,
-        });
-      } catch (error) {
-        console.error(error);
-      }
-    }
-
-    results.sort((a, b) => b.score - a.score);
-
-    setModelComparisons(results);
-    if (results.length > 0) {
-      setSelectedRadarModels(results[0].model);
-      setSelectedRadarMetrics(results[0].metrics);
-    }
-
-    console.log("MODEL COMPARISON RESULTS", results);
-  };
-
   // SEND TO LLM
   const sendToLLM = async () => {
     try {
@@ -238,7 +126,7 @@ export default function Dashboard() {
       const result = await runPromptChain({
         generatedPrompt,
         selectedStrategies,
-        selectedModels,
+        selectedModel,
       });
 
       const endTime = performance.now();
@@ -250,41 +138,21 @@ export default function Dashboard() {
 
       setChainResults(result.steps || result.chainResults || []);
 
-      /* Model Comparison */
-      await runModelComparison(generatedPrompt);
+      // EXTRACT SECURITY SCORE
+      const scoreMatch = result.finalResponse.match(/(\d{1,3})\/100/);
 
-      try {
-        const scoringStep = result.steps?.find(
-          (step) => step.title === "Security Scoring",
-        );
+      if (scoreMatch) {
+        const score = parseInt(scoreMatch[1]);
 
-        const source = scoringStep?.content || result.finalResponse;
+        setSecurityScore(score);
 
-        const jsonMatch = source.match(/\{[\s\S]*?\}/);
-
-        if (jsonMatch) {
-          const metrics = JSON.parse(jsonMatch[0]);
-
-          console.log("SECURITY METRICS:", metrics);
-
-          setSecurityMetrics({
-            authentication: metrics.authentication,
-
-            authorization: metrics.authorization,
-
-            input_validation: metrics.input_validation,
-
-            secret_management: metrics.secret_management,
-
-            logging: metrics.logging,
-          });
-
-          setSecurityScore(metrics.overall_score);
-
-          setRiskLevel(metrics.risk_level);
+        if (score >= 80) {
+          setRiskLevel("Low");
+        } else if (score >= 50) {
+          setRiskLevel("Medium");
+        } else {
+          setRiskLevel("High");
         }
-      } catch (error) {
-        console.error("JSON PARSE ERROR:", error);
       }
     } catch (error) {
       console.error(error);
@@ -294,24 +162,6 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
-
-  /* BEST MODEL */
-  const bestModel =
-    modelComparisons.length > 0
-      ? [...modelComparisons].sort((a, b) => b.score - a.score)[0]
-      : null;
-
-  const recommendations = generateRecommendations(securityMetrics);
-
-  const criticalCount =
-    JSON.stringify(chainResults).match(/critical/gi)?.length || 0;
-
-  const highCount = JSON.stringify(chainResults).match(/high/gi)?.length || 0;
-
-  const mediumCount =
-    JSON.stringify(chainResults).match(/medium/gi)?.length || 0;
-
-  const lowCount = JSON.stringify(chainResults).match(/low/gi)?.length || 0;
 
   // RENDER
   return (
@@ -366,9 +216,10 @@ export default function Dashboard() {
                   font-semibold
                   text-white
 
-                  ${selectedScenario?.id === scenario.id
-                    ? "bg-blue-500 hover:bg-blue-600"
-                    : "bg-gray-500 hover:bg-gray-600"
+                  ${
+                    selectedScenario?.id === scenario.id
+                      ? "bg-blue-500 hover:bg-blue-600"
+                      : "bg-gray-500 hover:bg-gray-600"
                   }
                 `}
               >
@@ -484,125 +335,6 @@ export default function Dashboard() {
             />
           </div>
 
-          {/* SECURITY RADAR */}
-          <div
-            className="
-              bg-white
-              rounded-2xl
-              shadow
-              p-6
-              mb-6
-            "
-          >
-            <h2 className="text-xl font-bold mb-4">Security Radar</h2>
-
-            <span
-              className="
-                px-3
-                py-1
-                bg-gray-100
-                text-blue-700
-                rounded-lg
-                text-sm
-                font-semibold
-              "
-            >
-              {selectedRadarModels}
-            </span>
-          </div>
-
-          <SecurityRadar
-            securityScore={securityScore}
-            metrics={selectedRadarMetrics || securityMetrics}
-            selectedRadarModels={selectedRadarModels}
-          />
-
-          <VulnerabilityChart
-            critical={criticalCount}
-            high={highCount}
-            medium={mediumCount}
-            low={lowCount}
-          />
-
-          {recommendations.length > 0 && (
-            <div className="mt-6">
-              <h3 className="font-bold text-lg mb-4">
-                Security Recommendations
-              </h3>
-
-              {recommendations.map((rec, index) => {
-                const severityStyles = {
-                  Critical: {
-                    bg: "bg-red-50",
-                    border: "border-red-500",
-                    text: "text-red-700",
-                    icon: "🔴",
-                  },
-
-                  High: {
-                    bg: "bg-orange-50",
-                    border: "border-orange-500",
-                    text: "text-orange-700",
-                    icon: "🟠",
-                  },
-
-                  Medium: {
-                    bg: "bg-yellow-50",
-                    border: "border-yellow-500",
-                    text: "text-yellow-700",
-                    icon: "🟡",
-                  },
-
-                  Low: {
-                    bg: "bg-green-50",
-                    border: "border-green-500",
-                    text: "text-green-700",
-                    icon: "🟢",
-                  },
-                };
-
-                const style =
-                  severityStyles[rec.severity] || severityStyles.Low;
-
-                return (
-                  <div
-                    key={index}
-                    className={`
-                      ${style.bg}
-                      border-l-4
-                      ${style.border}
-                      rounded-xl
-                      p-4
-                      mb-4
-                      shadow-sm
-                      hover:shadow-md
-                      transition
-                    `}
-                  >
-                    <div className="flex items-center mb-2">
-                      <span className="text-xl mr-2">{style.icon}</span>
-
-                      <h4 className="font-bold text-lg">{rec.title}</h4>
-                    </div>
-
-                    <div
-                      className={`
-                        text-sm
-                        font-semibold
-                        mb-3
-                        ${style.text}
-                      `}
-                    >
-                      {rec.severity}
-                    </div>
-
-                    <p className="text-gray-700">{rec.recommendation}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
           {/* RESPONSE PANEL */}
           <div
             className="
@@ -659,11 +391,12 @@ export default function Dashboard() {
                       text-white
                       font-bold
 
-                      ${securityScore >= 80
-                        ? "bg-green-500"
-                        : securityScore >= 60
-                          ? "bg-yellow-500"
-                          : "bg-red-500"
+                      ${
+                        securityScore >= 80
+                          ? "bg-green-500"
+                          : securityScore >= 60
+                            ? "bg-yellow-500"
+                            : "bg-red-500"
                       }
                     `}
                   >
@@ -679,11 +412,12 @@ export default function Dashboard() {
                       text-white
                       font-bold
 
-                      ${riskLevel === "Low"
-                        ? "bg-green-500"
-                        : riskLevel === "Medium"
-                          ? "bg-yellow-500"
-                          : "bg-red-500"
+                      ${
+                        riskLevel === "Low"
+                          ? "bg-green-500"
+                          : riskLevel === "Medium"
+                            ? "bg-yellow-500"
+                            : "bg-red-500"
                       }
                     `}
                   >
@@ -709,82 +443,7 @@ export default function Dashboard() {
                 <MarkdownRenderer content={llmResponse} />
               </div>
 
-              {/* MODEL COMPARISON */}
-              {modelComparisons.length > 0 && (
-                <div
-                  className="
-                    bg-white
-                    rounded-xl
-                    border
-                    p-4
-                    mb-6
-                  "
-                >
-                  {/* BEST MODEL */}
-                  {bestModel && (
-                    <div
-                      className="
-                        mb-4
-                        p-4
-                        bg-green-100
-                        rounded-xl
-                        border
-                      "
-                    >
-                      🏆 Best Model
-                      <span className="font-bold ml-2">{bestModel.model}</span>
-                      <span className="ml-4">Score: {bestModel.score}</span>
-                    </div>
-                  )}
-
-                  <h3 className="font-bold text-lg mb-4">Model Comparison</h3>
-
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="border-b bg-gray-100">
-                        <th className="text-left p-2">Model</th>
-
-                        <th className="text-left p-2">Time (s)</th>
-
-                        <th className="text-left p-2">Response Size</th>
-
-                        <th className="text-left p-2">Vulnerabilities</th>
-
-                        <th className="text-left p-2">Score</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {modelComparisons.map((result, index) => (
-                        <tr
-                          key={index}
-                          className="
-                            border-b 
-                            cursor-pointer 
-                            hover:bg-gray-50
-                          "
-                          onClick={() => {
-                            setSelectedRadarModels(result.model);
-                            setSelectedRadarMetrics(result.metrics);
-                          }}
-                        >
-                          <td className="p-2">{result.model}</td>
-
-                          <td className="p-2">{result.executionTime}</td>
-
-                          <td className="p-2">{result.responseLength}</td>
-
-                          <td className="p-2">{result.vulnerabilityCount}</td>
-
-                          <td className="p-2 font-bold">{result.score}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* PROMPT CHAIN FLOW */}
+              {/* PROMPT CHAIN STEPS */}
               {chainResults.length > 0 && (
                 <div className="mb-6">
                   <h3 className="font-bold text-lg mb-4">Prompt Chain Flow</h3>
@@ -824,10 +483,11 @@ export default function Dashboard() {
                     bg-white
                     border
                     rounded-xl
-                    "
+                  "
                 >
                   <h3 className="font-bold mb-2">{step.step || step.title}</h3>
 
+                  {/*EXCUTION TIME*/}
                   {step.executionTime && (
                     <div className="text-xs text-gray-500 mb-3">
                       Execution Time: {step.executionTime}s
@@ -837,10 +497,6 @@ export default function Dashboard() {
                   <div className="prose max-w-none">
                     <MarkdownRenderer content={step.content} />
                   </div>
-
-                  {step.title === "Attack Simulation" && (
-                    <AttackCards content={step.content} />
-                  )}
                 </div>
               ))}
 
@@ -885,55 +541,6 @@ export default function Dashboard() {
                         </div>
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {modelComparisons.length > 0 && (
-                <div className="mt-8">
-                  <h3 className="font-bold text-lg mb-4">Model Comparison</h3>
-
-                  <div className="overflow-x-auto">
-                    <table
-                      className="
-                        w-full
-                        border
-                        rounded-xl
-                        overflow-hidden
-                      "
-                    >
-                      <thead>
-                        <tr className="bg-gray-100">
-                          <th className="p-3 text-left">Model</th>
-
-                          <th className="p-3 text-left">Time (s)</th>
-
-                          <th className="p-3 text-left">Response Size</th>
-
-                          <th className="p-3 text-left">Vulnerabilities</th>
-
-                          <th className="p-3 text-left">Score</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {modelComparisons.map((result, index) => (
-                          <tr key={index} className="border-t">
-                            <td className="p-3 font-semibold">
-                              {result.model}
-                            </td>
-
-                            <td className="p-3">{result.executionTime}</td>
-
-                            <td className="p-3">{result.responseLength}</td>
-
-                            <td className="p-3">{result.vulnerabilityCount}</td>
-
-                            <td className="p-3">{result.score}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
                   </div>
                 </div>
               )}
@@ -987,35 +594,16 @@ export default function Dashboard() {
         >
           <div className="bg-gray-300 p-4 rounded-xl mb-6">
             <h2 className="text-black font-bold mb-2">Modèle LLM</h2>
-            <div className="flex gap-4 flex-wrap">
-              {["llama3", "mistral", "phi4"].map((model) => (
-                <label
-                  key={model}
-                  className="
-                    flex
-                    items-center
-                    gap-2
-                    bg-white
-                    border
-                    px-3
-                    py-2
-                    rounded-lg
-                    cursor-pointer
-                  "
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedModels.includes(model)}
-                    onChange={() => toggleModel(model)}
-                  />
-
-                  {model}
-                </label>
-              ))}
-              <div className="mt-2 text-sm text-gray-500">
-                Models selected: {selectedModels.join(", ")}
-              </div>
-            </div>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="bg-gray-300 w-full p-2 rounded-lg text-black"
+            >
+              <option value="llama3">LLaMA 3</option>
+              <option value="mistral">Mistral</option>
+              <option value="phi4">Phi-4</option>
+              <option value="qwen">Qwen</option>
+            </select>
           </div>
 
           <h2 className="text-xl font-bold mb-4 text-white">Stratégies</h2>
