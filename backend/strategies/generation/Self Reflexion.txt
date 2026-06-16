@@ -1,2 +1,9 @@
-Analyze your own generated code.
-Identify waknesses and improve security before final output
+Generate the code.
+
+Review your solution.
+
+Identify weaknesses.
+
+Improve the code.
+
+Return the final improved version.

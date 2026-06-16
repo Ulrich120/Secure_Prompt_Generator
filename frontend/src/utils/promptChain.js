@@ -1,25 +1,24 @@
 import { executeStrategies } from "./strategyEngine";
 
+const DEFAULT_MODEL = "deepseek/deepseek-chat-v3-0324";
+
 // FETCH LLM
-async function fetchLLM(prompt, selectedModel = "llama3") {
+async function fetchLLM(prompt, selectedModel = DEFAULT_MODEL) {
   try {
     console.log("MODEL SENT TO BACKEND:", selectedModel);
 
-    const response = await fetch(
-      "http://127.0.0.1:8000/generate",
-      {
-        method: "POST",
+    const response = await fetch("http://127.0.0.1:8000/generate", {
+      method: "POST",
 
-        headers: {
-          "Content-Type": "application/json",
-        },
+      headers: {
+        "Content-Type": "application/json",
+      },
 
-        body: JSON.stringify({
-          prompt,
-          model: selectedModel,
-        }),
-      }
-    );
+      body: JSON.stringify({
+        prompt,
+        model: selectedModel,
+      }),
+    });
 
     console.log("HTTP STATUS:", response.status);
 
@@ -28,12 +27,13 @@ async function fetchLLM(prompt, selectedModel = "llama3") {
     console.log("BACKEND RESPONSE:", data);
 
     if (data.error) {
-      throw new Error(data.error);
+      throw new Error(JSON.stringify(data.error));
     }
 
     return data.response;
   } catch (error) {
     console.error("FETCH LLM ERROR:", error);
+
     throw error;
   }
 }
@@ -42,31 +42,18 @@ async function fetchLLM(prompt, selectedModel = "llama3") {
 export async function runPromptChain({
   generatedPrompt,
   selectedStrategy,
-  selectedModels,
+  selectedModel = DEFAULT_MODEL,
 }) {
-
   try {
-
     return await executeStrategies({
-
       basePrompt: generatedPrompt,
 
       strategy: selectedStrategy,
 
-      fetchLLM: (prompt) =>
-        fetchLLM(
-          prompt,
-          selectedModels?.[0] || "llama3"
-        ),
-
+      fetchLLM: (prompt) => fetchLLM(prompt, selectedModel),
     });
-
   } catch (error) {
-
-    console.error(
-      "PROMPT CHAIN ERROR:",
-      error
-    );
+    console.error("PROMPT CHAIN ERROR:", error);
 
     throw error;
   }

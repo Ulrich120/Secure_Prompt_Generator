@@ -1,0 +1,8 @@
+Create a secure REST API.
+
+Requirements:
+
+- JWT authentication
+- role-based authorization
+- input validation
+- secure error handling
