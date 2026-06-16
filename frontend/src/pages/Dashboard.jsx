@@ -9,6 +9,8 @@ export default function Dashboard() {
   // ROUTER PARAMS
   const { mode } = useParams();
 
+  const model = "deepseek/deepseek-chat-v3-0324";
+
   // STATES
   const [scenarios, setScenarios] = useState([]);
   const [strategies, setStrategies] = useState([]);
@@ -76,7 +78,6 @@ export default function Dashboard() {
     setLlmResponse("");
 
     setChainResults([]);
-
   }, [mode]);
 
   // BUILD PROMPT
@@ -95,12 +96,12 @@ export default function Dashboard() {
       const result = await runPromptChain({
         generatedPrompt,
         selectedStrategy,
+        selectedModel: model,
       });
 
       setLlmResponse(result.finalResponse);
 
       setChainResults(result.steps || result.chainResults || []);
-
     } catch (error) {
       console.error(error);
 
@@ -163,9 +164,10 @@ export default function Dashboard() {
                   font-semibold
                   text-white
 
-                  ${selectedScenario?.id === scenario.id
-                    ? "bg-blue-500 hover:bg-blue-600"
-                    : "bg-gray-500 hover:bg-gray-600"
+                  ${
+                    selectedScenario?.id === scenario.id
+                      ? "bg-blue-500 hover:bg-blue-600"
+                      : "bg-gray-500 hover:bg-gray-600"
                   }
                 `}
               >
@@ -267,9 +269,7 @@ export default function Dashboard() {
           >
             {/* HEADER */}
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold">
-                Réponse du LLM
-              </h2>
+              <h2 className="text-xl font-bold">Réponse du LLM</h2>
             </div>
 
             {/* RESPONSE BOX */}
@@ -330,9 +330,7 @@ export default function Dashboard() {
                     rounded-xl
                     "
                 >
-                  <h3 className="font-bold mb-2">
-                    {step.title}
-                  </h3>
+                  <h3 className="font-bold mb-2">{step.title}</h3>
 
                   {step.prompt && (
                     <div className="mb-4">
@@ -359,10 +357,8 @@ export default function Dashboard() {
                   <div className="prose max-w-none">
                     <MarkdownRenderer content={step.content} />
                   </div>
-
                 </div>
               ))}
-
             </div>
           </div>
 
@@ -412,10 +408,11 @@ export default function Dashboard() {
           "
         >
           <div className="bg-gray-300 p-4 rounded-xl mb-6">
-            <h2 className="text-black font-bold mb-2">
-              Modèle LLM
-            </h2>
-            <p2>llama3</p2>
+            <h2 className="text-black font-bold mb-2">Modèle LLM</h2>
+
+            <p className="text-sm text-blue-700 break-all">{model}</p>
+
+            <p className="text-sm text-gray-600">via OpenRouter</p>
           </div>
 
           <h2 className="text-xl font-bold mb-4 text-white">Stratégies</h2>

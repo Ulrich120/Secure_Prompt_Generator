@@ -1,10 +1,9 @@
-TITLE: Secure Login System
-
-PROMPT: Generate a Secure Login System using JWT authentification
+Create a secure login system.
 
 Requirements:
-- password hashing
-- Secure sessions
-- rate limiting
-- CSRF protection
-- OWASP compliance
+
+- user registration
+- user login
+- password hashing using bcrypt
+- JWT authentication
+- input validation

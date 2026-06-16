@@ -1,2 +1,1 @@
-Use one-shot prompting to guide the generation.
-Provide a complete secure implementation example.
+Generate secure production-ready code.
