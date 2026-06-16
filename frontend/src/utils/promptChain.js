@@ -1,11 +1,8 @@
-import { executeStrategies }
-from "./strategyEngine";
+import { executeStrategies } from "./strategyEngine";
 
 // FETCH LLM
 async function fetchLLM(prompt, selectedModel = "llama3") {
-
   try {
-
     console.log("MODEL SENT TO BACKEND:", selectedModel);
 
     const response = await fetch(
@@ -24,7 +21,6 @@ async function fetchLLM(prompt, selectedModel = "llama3") {
       }
     );
 
-    // DEBUG
     console.log("HTTP STATUS:", response.status);
 
     const data = await response.json();
@@ -36,24 +32,17 @@ async function fetchLLM(prompt, selectedModel = "llama3") {
     }
 
     return data.response;
-
   } catch (error) {
-
     console.error("FETCH LLM ERROR:", error);
-
     throw error;
   }
 }
 
 // MAIN CHAIN
 export async function runPromptChain({
-
   generatedPrompt,
-
-  selectedStrategies,
-
+  selectedStrategy,
   selectedModels,
-
 }) {
 
   try {
@@ -62,9 +51,14 @@ export async function runPromptChain({
 
       basePrompt: generatedPrompt,
 
-      strategies: selectedStrategies,
+      strategy: selectedStrategy,
 
-      fetchLLM: (prompt) => fetchLLM(prompt, selectedModels?.[0] || "llama3"),
+      fetchLLM: (prompt) =>
+        fetchLLM(
+          prompt,
+          selectedModels?.[0] || "llama3"
+        ),
+
     });
 
   } catch (error) {

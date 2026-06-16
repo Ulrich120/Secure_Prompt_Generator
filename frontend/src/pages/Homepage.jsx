@@ -9,17 +9,17 @@ export default function Homepage() {
 
       <div className="flex gap-8">
         <button
-          onClick={() => navigate("/dashboard/analysis")}
+          onClick={() => navigate("/dashboard/verification")}
           className="px-10 py-6 bg-blue-600 hover:bg-blue-800 text-white text-xl rounded-2xl transition"
         >
-          Détection de Vulnérabilités
+          Code Verification
         </button>
 
         <button
           onClick={() => navigate("/dashboard/generation")}
           className="px-10 py-6 bg-green-600 hover:bg-green-800 text-white text-xl rounded-2xl transition"
         >
-          Génération de Code Sécurisé
+          Code Generation
         </button>
       </div>
     </div>

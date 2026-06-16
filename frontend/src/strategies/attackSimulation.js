@@ -1,65 +1,33 @@
 export async function attackSimulation({
-
   currentResponse,
-
   fetchLLM,
-
 }) {
-
   console.log("Running attack simulation strategy...");
 
   const prompt = `
+You are a Senior Penetration Tester.
 
-You are a Senior Penetration Tester and Red Team Expert.
+Analyze the following content.
 
-Analyze the following security report and simulate realistic cyberattacks.
+Generate possible attack scenarios.
 
-For EACH vulnerability found, provide:
+For each attack provide:
 
-# Attack Scenario
+- attack name
+- attack steps
+- impact
+- mitigation
 
-Attack Type:
-- vulnerability category
-
-Severity:
-- Critical / High / Medium / Low
-
-Attack Payload:
-- realistic payload example
-
-Attack Steps:
-1. step one
-2. step two
-3. step three
-
-Expected Result:
-- what the attacker gains
-
-Business Impact:
-- data breach
-- privilege escalation
-- service disruption
-- remote code execution
-- etc.
-
-Mitigation:
-- precise remediation recommendation
-
-Format everything in markdown.
-
-Security Report:
+Content:
 
 ${currentResponse}
-
 `;
 
   const response = await fetchLLM(prompt);
 
   return {
-
     title: "Attack Simulation",
-
+    prompt,
     content: response,
-
   };
 }

@@ -1,17 +1,13 @@
 import { strategyRegistry } from "../strategies/strategyRegistry";
 
 export async function executeStrategies({
-
   basePrompt,
-
   strategy,
-
   fetchLLM,
-
 }) {
+  let steps = [];
 
-  const steps = [];
-
+  // Réponse initiale du LLM
   let currentResponse = await fetchLLM(basePrompt);
 
   steps.push({
@@ -20,22 +16,32 @@ export async function executeStrategies({
     content: currentResponse,
   });
 
+  // Si aucune stratégie n'est sélectionnée
   if (!strategy) {
-
     return {
       finalResponse: currentResponse,
       chainResults: steps,
     };
-
   }
+
+  console.log("STRATEGY TITLE:", strategy.title);
 
   const strategyExecutor =
     strategyRegistry[strategy.title];
 
-  if (!strategyExecutor) {
+  console.log(
+    "AVAILABLE REGISTRY:",
+    Object.keys(strategyRegistry)
+  );
 
+  console.log(
+    "EXECUTOR:",
+    strategyExecutor
+  );
+
+  if (!strategyExecutor) {
     console.warn(
-      "No executor found for:",
+      "NO EXECUTOR FOUND FOR:",
       strategy.title
     );
 
@@ -45,23 +51,24 @@ export async function executeStrategies({
     };
   }
 
+  const start = performance.now();
+
   const result = await strategyExecutor({
-
     currentResponse,
-
     fetchLLM,
-
   });
+
+  const end = performance.now();
+
+  result.executionTime =
+    ((end - start) / 1000).toFixed(2) + "s";
 
   currentResponse = result.content;
 
   steps.push(result);
 
   return {
-
     finalResponse: currentResponse,
-
     chainResults: steps,
-
   };
 }
