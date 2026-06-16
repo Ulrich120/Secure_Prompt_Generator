@@ -1,33 +1,31 @@
 export async function oneShot({
-
   currentResponse,
-
-  fetchLLM
-
+  fetchLLM,
 }) {
-  console.log("Running one-shot improvement strategy...");
 
   const prompt = `
+Example:
 
-Improve the following secure code generation.
+Input:
+Create a login system.
 
-Ensure:
-- production-ready code
-- strong authentication
-- secure input validation
-- proper session management
+Output:
+A secure login system must include:
+- password hashing
+- authentication
+- authorization
+- session management
 
-Content:
+Now analyze the following content:
+
 ${currentResponse}
-
 `;
 
-  const improvedResponse = await fetchLLM(prompt);
+  const response = await fetchLLM(prompt);
 
   return {
-
-    title: "One-Shot Improvement",
-
-    content: improvedResponse
+    title: "One-Shot Prompting",
+    prompt,
+    content: response,
   };
 }

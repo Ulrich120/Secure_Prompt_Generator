@@ -32,39 +32,26 @@ async def generate(data: dict):
     try:
         prompt = data.get("prompt", "")
 
-        prompt += """
-
-IMPORTANT:
-
-At the end of your analysis, return a JSON block exactly like this:
-
-{
-  "overall_score": 0,
-  "authentication": 0,
-  "authorization": 0,
-  "input_validation": 0,
-  "secret_management": 0,
-  "logging": 0,
-  "risk_level": ""
-}
-
-Rules:
-- all scores must be between 0 and 100
-- risk_level must be Low, Medium or High
-- return valid JSON only inside the JSON block
-"""
-
         model = data.get("model", "llama3")
 
         response = ollama.chat(
-            model=model, messages=[{"role": "user", "content": prompt}]
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
         )
 
-        return {"response": response["message"]["content"]}
+        return {
+            "response": response["message"]["content"]
+        }
 
     except Exception as e:
-        return {"error": str(e)}
-
+        return {
+            "error": str(e)
+        }
 
 # STRATEGIES ENDPOINT
 @app.get("/strategies/{mode}")

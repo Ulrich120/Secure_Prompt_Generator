@@ -23,7 +23,12 @@ def load_scenarios(mode):
                 content = file.read()
 
             # nom du fichier sans .txt
-            title = filename.replace(".txt", "")
+            title = (
+                        filename
+                        .replace(".txt", "")
+                        .replace("_", " ")
+                        .title()
+                    )
 
             scenarios.append({
                 "id": title.lower().replace(" ", "-"),
@@ -32,15 +37,3 @@ def load_scenarios(mode):
             })
 
     return scenarios
-
-def extract_title(content):
-    lines = content.splitlines()
-    for line in lines:
-        if line.startswith("Title:"):
-            return line.replace("Title:", "").strip()
-    return "Untitled"
-
-def extract_prompt(content):
-    if "PROMPT:" in content:
-        return content.split("PROMPT:")[1].strip()
-    return "No prompt found"
