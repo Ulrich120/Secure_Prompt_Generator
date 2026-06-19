@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi import UploadFile, File, Form
+import shutil
+
+from pydantic import BaseModel
+
 from scenario_loader import load_scenarios
 from strategy_loader import load_strategies
 
@@ -100,6 +105,74 @@ def get_scenarios(mode: str):
 
     try:
         return load_scenarios(mode)
+
+    except Exception as e:
+        return {"error": str(e)}
+    
+# ADD SCENARIO
+@app.post("/upload-scenario")
+async def upload_scenario(
+    mode: str = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        folder_path = f"Scenarios/{mode}"
+
+        os.makedirs(folder_path, exist_ok=True)
+
+        file_path = os.path.join(
+            folder_path,
+            file.filename
+        )
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        return {
+            "message": "Scenario uploaded successfully",
+            "filename": file.filename
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
+    
+#
+
+
+class ScenarioCreate(BaseModel):
+    mode: str
+    title: str
+    content: str
+
+
+@app.post("/create-scenario")
+def create_scenario(data: ScenarioCreate):
+    try:
+        safe_title = (
+            data.title
+            .lower()
+            .replace(" ", "_")
+            .replace("/", "_")
+            .replace("\\", "_")
+        )
+
+        if not safe_title.endswith(".txt"):
+            safe_title += ".txt"
+
+        folder_path = f"Scenarios/{data.mode}"
+        os.makedirs(folder_path, exist_ok=True)
+
+        file_path = os.path.join(folder_path, safe_title)
+
+        with open(file_path, "w", encoding="utf-8") as file:
+            file.write(data.content)
+
+        return {
+            "message": "Scenario created successfully",
+            "filename": safe_title,
+        }
 
     except Exception as e:
         return {"error": str(e)}
