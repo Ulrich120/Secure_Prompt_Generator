@@ -138,9 +138,7 @@ async def upload_scenario(
             "error": str(e)
         }
     
-#
-
-
+# CREATE SCENARIO
 class ScenarioCreate(BaseModel):
     mode: str
     title: str
@@ -176,3 +174,252 @@ def create_scenario(data: ScenarioCreate):
 
     except Exception as e:
         return {"error": str(e)}
+    
+# UPDATE AND DELETE SCENARIO 
+class ScenarioUpdate(BaseModel):
+    mode: str
+    old_title: str
+    new_title: str
+    content: str
+
+
+class ScenarioDelete(BaseModel):
+    mode: str
+    title: str
+
+
+@app.put("/update-scenario")
+def update_scenario(data: ScenarioUpdate):
+    try:
+        folder_path = f"Scenarios/{data.mode}"
+
+        old_filename = (
+            data.old_title.lower()
+            .replace(" ", "_")
+            .replace("/", "_")
+            .replace("\\", "_")
+        )
+
+        new_filename = (
+            data.new_title.lower()
+            .replace(" ", "_")
+            .replace("/", "_")
+            .replace("\\", "_")
+        )
+
+        if not old_filename.endswith(".txt"):
+            old_filename += ".txt"
+
+        if not new_filename.endswith(".txt"):
+            new_filename += ".txt"
+
+        old_path = os.path.join(folder_path, old_filename)
+        new_path = os.path.join(folder_path, new_filename)
+
+        if os.path.exists(old_path) and old_path != new_path:
+            os.remove(old_path)
+
+        with open(new_path, "w", encoding="utf-8") as file:
+            file.write(data.content)
+
+        return {
+            "message": "Scenario updated successfully",
+            "filename": new_filename,
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+    
+
+@app.delete("/delete-scenario")
+def delete_scenario(data: ScenarioDelete):
+    try:
+        folder_path = f"Scenarios/{data.mode}"
+
+        filename = (
+            data.title.lower()
+            .replace(" ", "_")
+            .replace("/", "_")
+            .replace("\\", "_")
+        )
+
+        if not filename.endswith(".txt"):
+            filename += ".txt"
+
+        file_path = os.path.join(folder_path, filename)
+
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+            return {
+                "message": "Scenario deleted successfully",
+                "filename": filename,
+            }
+
+        return {"error": "Scenario not found"}
+
+    except Exception as e:
+        return {"error": str(e)}
+    
+# UPLOAD, CREATE, UPDATE AND DELETE STRATEGY
+
+class StrategyCreate(BaseModel):
+    mode: str
+    title: str
+    content: str
+
+
+class StrategyUpdate(BaseModel):
+    mode: str
+    old_title: str
+    new_title: str
+    content: str
+
+
+class StrategyDelete(BaseModel):
+    mode: str
+    title: str
+
+
+def safe_strategy_filename(title: str):
+    filename = (
+        title.strip()
+        .lower()
+        .replace(" ", "_")
+        .replace("/", "_")
+        .replace("\\", "_")
+    )
+
+    if not filename.endswith(".txt"):
+        filename += ".txt"
+
+    return filename
+
+
+def format_strategy_content(title: str, content: str):
+    clean_content = content.strip()
+
+    if clean_content.lower().startswith("title:"):
+        return clean_content
+
+    return f"""Title: {title.strip()}
+
+{clean_content}
+"""
+
+
+@app.post("/create-strategy")
+def create_strategy(data: StrategyCreate):
+    try:
+        folder_path = f"strategies/{data.mode}"
+        os.makedirs(folder_path, exist_ok=True)
+
+        filename = safe_strategy_filename(data.title)
+        file_path = os.path.join(folder_path, filename)
+
+        formatted_content = format_strategy_content(
+            data.title,
+            data.content
+        )
+
+        with open(file_path, "w", encoding="utf-8") as file:
+            file.write(formatted_content)
+
+        return {
+            "message": "Strategy created",
+            "filename": filename
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
+
+
+@app.put("/update-strategy")
+def update_strategy(data: StrategyUpdate):
+    try:
+        folder_path = f"strategies/{data.mode}"
+        os.makedirs(folder_path, exist_ok=True)
+
+        old_file = safe_strategy_filename(data.old_title)
+        new_file = safe_strategy_filename(data.new_title)
+
+        old_path = os.path.join(folder_path, old_file)
+        new_path = os.path.join(folder_path, new_file)
+
+        if os.path.exists(old_path) and old_path != new_path:
+            os.remove(old_path)
+
+        formatted_content = format_strategy_content(
+            data.new_title,
+            data.content
+        )
+
+        with open(new_path, "w", encoding="utf-8") as file:
+            file.write(formatted_content)
+
+        return {
+            "message": "Strategy updated",
+            "filename": new_file
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
+
+
+@app.delete("/delete-strategy")
+def delete_strategy(data: StrategyDelete):
+    try:
+        folder_path = f"strategies/{data.mode}"
+
+        filename = safe_strategy_filename(data.title)
+        file_path = os.path.join(folder_path, filename)
+
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+            return {
+                "message": "Strategy deleted",
+                "filename": filename
+            }
+
+        return {
+            "error": "Strategy not found",
+            "filename": filename
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
+
+
+@app.post("/upload-strategy")
+async def upload_strategy(
+    mode: str = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        folder_path = f"strategies/{mode}"
+        os.makedirs(folder_path, exist_ok=True)
+
+        file_path = os.path.join(
+            folder_path,
+            file.filename
+        )
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        return {
+            "message": "Strategy uploaded",
+            "filename": file.filename
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e)
+        }

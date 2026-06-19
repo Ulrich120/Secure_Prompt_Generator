@@ -13,6 +13,11 @@ export default function Dashboard() {
   const [scenarios, setScenarios] = useState([]);
   const [strategies, setStrategies] = useState([]);
 
+  const [showStrategyForm, setShowStrategyForm] = useState(false);
+  const [editingStrategy, setEditingStrategy] = useState(null);
+  const [newStrategyTitle, setNewStrategyTitle] = useState("");
+  const [newStrategyContent, setNewStrategyContent] = useState("");
+
   const [selectedScenario, setSelectedScenario] = useState(null);
   const [selectedStrategy, setSelectedStrategy] = useState(null);
 
@@ -22,11 +27,12 @@ export default function Dashboard() {
   const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const bottomRef = useRef(null);
-
   const [newScenarioTitle, setNewScenarioTitle] = useState("");
   const [newScenarioContent, setNewScenarioContent] = useState("");
+  const [editingScenario, setEditingScenario] = useState(null);
   const [showScenarioForm, setShowScenarioForm] = useState(false);
+
+  const bottomRef = useRef(null);
 
   const getTime = () =>
     new Date().toLocaleTimeString([], {
@@ -34,16 +40,149 @@ export default function Dashboard() {
       minute: "2-digit",
     });
 
+  const refreshStrategies = async () => {
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/strategies/${mode}`);
+      const data = await response.json();
+      setStrategies(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const createStrategy = async () => {
+    try {
+      await fetch("http://127.0.0.1:8000/create-strategy", {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          mode,
+          title: newStrategyTitle,
+          content: newStrategyContent,
+        }),
+      });
+
+      await refreshStrategies();
+
+      setNewStrategyTitle("");
+      setNewStrategyContent("");
+      setShowStrategyForm(false);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const editStrategy = (strategy) => {
+    setEditingStrategy(strategy);
+
+    setNewStrategyTitle(strategy.title);
+
+    setNewStrategyContent(strategy.prompt);
+
+    setShowStrategyForm(true);
+  };
+
+  const updateStrategy = async () => {
+    try {
+      await fetch("http://127.0.0.1:8000/update-strategy", {
+        method: "PUT",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          mode,
+          old_title: editingStrategy.title,
+          new_title: newStrategyTitle,
+          content: newStrategyContent,
+        }),
+      });
+
+      await refreshStrategies();
+
+      setEditingStrategy(null);
+
+      setNewStrategyTitle("");
+
+      setNewStrategyContent("");
+
+      setShowStrategyForm(false);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const deleteStrategy = async (strategy) => {
+    if (!window.confirm(`Delete "${strategy.title}" ?`)) {
+      return;
+    }
+
+    try {
+      await fetch("http://127.0.0.1:8000/delete-strategy", {
+        method: "DELETE",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          mode,
+          title: strategy.title,
+        }),
+      });
+
+      await refreshStrategies();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const uploadStrategy = async (event) => {
+    const file = event.target.files[0];
+
+    if (!file) return;
+
+    try {
+      const formData = new FormData();
+
+      formData.append("file", file);
+
+      formData.append("mode", mode);
+
+      await fetch("http://127.0.0.1:8000/upload-strategy", {
+        method: "POST",
+        body: formData,
+      });
+
+      await refreshStrategies();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const refreshScenarios = async () => {
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/scenarios/${mode}`);
+      const data = await response.json();
+      setScenarios(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const formatScenarioStrategyBubble = (scenario, strategy) => {
-    return `
-      📋 Scénario : ${scenario?.title || "Aucun scénario sélectionné"}
+    return `📋 Scénario : ${scenario?.title || "Aucun scénario sélectionné"}
 
-      ${scenario?.prompt || ""}
+    ${scenario?.prompt || ""}
 
-      🎯 Stratégie : ${strategy?.title || "Aucune stratégie sélectionnée"}
+    🎯 Stratégie : ${strategy?.title || "Aucune stratégie sélectionnée"}
 
-      ${strategy?.prompt || ""}
-    `;
+    ${strategy?.prompt || ""}`;
   };
 
   const updateScenarioStrategyBubble = (scenario, strategy) => {
@@ -66,17 +205,13 @@ export default function Dashboard() {
 
   const handleScenarioSelect = (scenario) => {
     setSelectedScenario(scenario);
-
     updateScenarioStrategyBubble(scenario, selectedStrategy);
-
     setConversationStarted(false);
   };
 
   const handleStrategySelect = (strategy) => {
     setSelectedStrategy(strategy);
-
     updateScenarioStrategyBubble(selectedScenario, strategy);
-
     setConversationStarted(false);
   };
 
@@ -84,11 +219,7 @@ export default function Dashboard() {
     const fetchScenarios = async () => {
       try {
         setLoading(true);
-
-        const response = await fetch(`http://127.0.0.1:8000/scenarios/${mode}`);
-        const data = await response.json();
-
-        setScenarios(data);
+        await refreshScenarios();
       } catch (error) {
         console.error("Erreur lors du chargement des scénarios :", error);
       } finally {
@@ -100,21 +231,7 @@ export default function Dashboard() {
   }, [mode]);
 
   useEffect(() => {
-    const fetchStrategies = async () => {
-      try {
-        const response = await fetch(
-          `http://127.0.0.1:8000/strategies/${mode}`,
-        );
-
-        const data = await response.json();
-
-        setStrategies(data);
-      } catch (error) {
-        console.error("Erreur lors du chargement des stratégies :", error);
-      }
-    };
-
-    fetchStrategies();
+    refreshStrategies();
   }, [mode]);
 
   useEffect(() => {
@@ -233,11 +350,9 @@ export default function Dashboard() {
 
       console.log("UPLOAD RESPONSE:", data);
 
-      const refresh = await fetch(`http://127.0.0.1:8000/scenarios/${mode}`);
+      await refreshScenarios();
 
-      const scenariosData = await refresh.json();
-
-      setScenarios(scenariosData);
+      event.target.value = "";
     } catch (error) {
       console.error("Erreur upload scénario :", error);
     }
@@ -250,17 +365,12 @@ export default function Dashboard() {
     }
 
     const formattedContent = `
-      Task:
-      ${newScenarioTitle}
-
-      Requirements:
       ${newScenarioContent
         .split("\n")
         .map((line) => line.trim())
         .filter(Boolean)
-        .map((line) => `- ${line}`)
-        .join("\n")}
-      `;
+        .map((line) => `- ${line.replace(/^[-•]\s*/, "")}`)
+        .join("\n")}`;
 
     const response = await fetch("http://127.0.0.1:8000/create-scenario", {
       method: "POST",
@@ -276,19 +386,89 @@ export default function Dashboard() {
 
     await response.json();
 
-    const refresh = await fetch(`http://127.0.0.1:8000/scenarios/${mode}`);
-
-    const data = await refresh.json();
-
-    setScenarios(data);
+    await refreshScenarios();
 
     setNewScenarioTitle("");
     setNewScenarioContent("");
     setShowScenarioForm(false);
   };
 
+  const editScenario = (scenario) => {
+    setEditingScenario(scenario);
+
+    setNewScenarioTitle(scenario.title);
+
+    setNewScenarioContent(scenario.prompt);
+
+    setShowScenarioForm(true);
+  };
+
+  const updateScenario = async () => {
+    try {
+      const formattedContent = newScenarioContent
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => `- ${line.replace(/^[-•]\s*/, "")}`)
+        .join("\n");
+
+      await fetch("http://127.0.0.1:8000/update-scenario", {
+        method: "PUT",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          mode,
+          old_title: editingScenario.title,
+          new_title: newScenarioTitle,
+          content: formattedContent,
+        }),
+      });
+
+      await refreshScenarios();
+
+      setEditingScenario(null);
+      setNewScenarioTitle("");
+      setNewScenarioContent("");
+      setShowScenarioForm(false);
+    } catch (error) {
+      console.error("Update error:", error);
+    }
+  };
+
+  const deleteScenario = async (scenario) => {
+    const confirmDelete = window.confirm(`Supprimer "${scenario.title}" ?`);
+
+    if (!confirmDelete) return;
+
+    try {
+      await fetch("http://127.0.0.1:8000/delete-scenario", {
+        method: "DELETE",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          mode,
+          title: scenario.title,
+        }),
+      });
+
+      await refreshScenarios();
+
+      if (selectedScenario?.title === scenario.title) {
+        setSelectedScenario(null);
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+    }
+  };
+
   return (
-    <div className="h-screen bg-gray-100 flex flex-col">
+    <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
       {/* HEADER */}
       <div
         className="
@@ -301,111 +481,107 @@ export default function Dashboard() {
           text-2xl
           font-bold
           shadow-lg
+          shrink-0
         "
       >
         🛡️ Secure Prompt Generator
       </div>
 
       {/* MAIN CONTENT */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-w-0">
         {/* LEFT PANEL */}
         <div
           className="
-            w-[18%]
+            w-[20%]
             bg-slate-700
             border-r
             p-4
-            overflow-y-auto
             flex
             flex-col
+            overflow-hidden
+            min-w-0
           "
         >
-          <h2 className="text-xl font-bold mb-4 text-white">📂 Scénarios</h2>
+          {/* SCROLLABLE CONTENT */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1">
+            <h2 className="text-xl font-bold mb-4 text-white">📂 Scénarios</h2>
 
-          <p className="text-sm text-gray-300 italic mb-4">Select a Scenario</p>
+            <p className="text-sm text-gray-300 italic mb-4">
+              Select a Scenario
+            </p>
 
-          <label
-            className="
-              mb-3
-              w-full
-              p-3
-              rounded-xl
-              bg-green-500
-              hover:bg-green-600
-              text-white
-              font-semibold
-              text-center
-              cursor-pointer
-              transition
-              block
-            "
-          >
-            ➕ Upload scénario
-            <input
-              type="file"
-              accept=".txt"
-              onChange={uploadScenario}
-              className="hidden"
-            />
-          </label>
-
-          <button
-            onClick={() => setShowScenarioForm(!showScenarioForm)}
-            className="
-              mb-4
-              w-full
-              p-3
-              rounded-xl
-              bg-purple-500
-              hover:bg-purple-600
-              text-white
-              font-semibold
-              transition
-            "
-          >
-            ✍️ Write scénario
-          </button>
-
-          {showScenarioForm && (
-            <div
+            <label
               className="
-                mb-4
-                bg-white
+                mb-3
+                w-full
                 p-3
                 rounded-xl
-                border
-                border-slate-500
-    "
+                bg-green-500
+                hover:bg-green-600
+                text-white
+                font-semibold
+                text-center
+                cursor-pointer
+                transition
+                block
+              "
             >
+              ➕ Upload scénario
               <input
-                value={newScenarioTitle}
-                onChange={(e) => setNewScenarioTitle(e.target.value)}
-                placeholder="Title ..."
-                className="
-                  w-full
-                  mb-2
-                  p-2
-                  rounded
-                  text-black
-                  outline-none
-                "
+                type="file"
+                accept=".txt"
+                onChange={uploadScenario}
+                className="hidden"
               />
+            </label>
 
-              <textarea
-                value={newScenarioContent}
-                onChange={(e) => setNewScenarioContent(e.target.value)}
-                placeholder={`Décris le scénario ici...
+            <button
+              onClick={() => setShowScenarioForm(!showScenarioForm)}
+              className="
+                mb-4
+                w-full
+                p-3
+                rounded-xl
+                bg-purple-500
+                hover:bg-purple-600
+                text-white
+                font-semibold
+                transition
+              "
+            >
+              ✍️ Write scénario
+            </button>
 
-                  Exemple :
-                  Créer un système de connexion sécurisé.
-
-                  Exigences :
-                  - inscription utilisateur
-                  - connexion utilisateur
-                  - hachage bcrypt
-                  - JWT
-                  - validation des entrées`}
+            {showScenarioForm && (
+              <div
                 className="
+                  mb-4
+                  bg-white
+                  p-3
+                  rounded-xl
+                  border
+                  border-slate-500
+                "
+              >
+                <input
+                  value={newScenarioTitle}
+                  onChange={(e) => setNewScenarioTitle(e.target.value)}
+                  placeholder="Title ... "
+                  className="
+                    w-full
+                    mb-2
+                    p-2
+                    rounded
+                    text-black
+                    outline-none
+                  "
+                />
+
+                <textarea
+                  value={newScenarioContent}
+                  onChange={(e) => setNewScenarioContent(e.target.value)}
+                  placeholder={`Describe the scenario`}
+                  className="
                     w-full
                     h-40
                     mb-2
@@ -415,57 +591,123 @@ export default function Dashboard() {
                     resize-none
                     outline-none
                   "
-              />
+                />
 
-              <div className="text-xs text-gray-300 mb-3 leading-relaxed">
-                Le contenu sera automatiquement structuré dans le fichier texte.
-              </div>
+                <div className="text-xs text-gray-500 mb-3 leading-relaxed">
+                  📄 The content will be automatically structured in the text
+                  file.
+                </div>
 
-              <button
-                onClick={createScenario}
-                className="
-                  w-full
-                  p-2
-                  rounded
-                  bg-green-500
-                  hover:bg-green-600
-                  text-white
-                  font-semibold
-                "
-              >
-                💾 Save
-              </button>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {scenarios.map((scenario, index) => (
-              <button
-                key={scenario.id || index}
-                onClick={() => handleScenarioSelect(scenario)}
-                className={`
-                  w-full
-                  p-4
-                  rounded-xl
-                  transition
-                  font-semibold
-                  text-white
-                  text-left
-
-                  ${
-                    selectedScenario?.id === scenario.id
-                      ? "bg-blue-500 hover:bg-blue-600"
-                      : "bg-gray-500 hover:bg-gray-600"
+                <button
+                  onClick={() =>
+                    editingScenario ? updateScenario() : createScenario()
                   }
-                `}
-              >
-                📄 {scenario.title}
-              </button>
-            ))}
+                  className="
+                    w-full
+                    p-2
+                    rounded
+                    bg-green-500
+                    hover:bg-green-600
+                    text-white
+                    font-semibold
+                  "
+                >
+                  {editingScenario ? "💾 Update" : "💾 Save"}
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {scenarios.map((scenario, index) => (
+                <div
+                  key={scenario.id || index}
+                  className={`
+                    flex
+                    items-center
+                    gap-2
+                    w-full
+                    p-3
+                    rounded-xl
+                    transition
+                    text-white
+                    overflow-hidden
+                    ${
+                      selectedScenario?.id === scenario.id
+                        ? "bg-blue-500 hover:bg-blue-600"
+                        : "bg-gray-500 hover:bg-gray-600"
+                    }
+                  `}
+                >
+                  <button
+                    onClick={() => handleScenarioSelect(scenario)}
+                    className="
+                      flex-1
+                      text-left
+                      font-semibold
+                      overflow-hidden
+                      min-w-0
+                    "
+                  >
+                    <span className="block truncate">📄 {scenario.title}</span>
+                  </button>
+
+                  <button
+                    onClick={() => editScenario(scenario)}
+                    className="
+                      w-7
+                      h-7
+                      rounded-full
+                      bg-yellow-400
+                      hover:bg-yellow-500
+                      flex
+                      items-center
+                      justify-center
+                      shrink-0
+                      text-sm
+                    "
+                    title="Modifier"
+                  >
+                    ✏️
+                  </button>
+
+                  <button
+                    onClick={() => deleteScenario(scenario)}
+                    className="
+                      w-7
+                      h-7
+                      rounded-full
+                      bg-red-500
+                      hover:bg-red-600
+                      flex
+                      items-center
+                      justify-center
+                      shrink-0
+                      text-sm
+                    "
+                    title="Supprimer"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="mt-auto border border-blue-400 rounded-xl p-4 text-white text-sm">
-            <div className="text-blue-300 font-bold mb-2">💡 Tip </div>
+          {/* FIXED TIP */}
+          <div
+            className="
+              shrink-0
+              mt-2
+              border
+              border-blue-400
+              rounded-xl
+              p-2
+              text-white
+              text-sm
+              bg-slate-800/40
+            "
+          >
+            <div className="text-blue-300 font-bold mb-2">💡 Tip</div>
             Choose a scenario and a strategy, then begin interacting with the
             LLM.
           </div>
@@ -474,12 +716,13 @@ export default function Dashboard() {
         {/* CENTER PANEL */}
         <div
           className="
-            w-[64%]
+            w-[60%]
             flex
             flex-col
             bg-gray-100
             p-4
             overflow-hidden
+            min-w-0
           "
         >
           <div
@@ -491,10 +734,11 @@ export default function Dashboard() {
               flex-col
               flex-1
               overflow-hidden
+              min-w-0
             "
           >
             {/* CHAT HEADER */}
-            <div className="p-4 border-b">
+            <div className="p-4 border-b shrink-0">
               <h2 className="text-xl font-bold">💬 Chat with LLM</h2>
 
               <p className="text-sm text-gray-500 mt-1">
@@ -511,8 +755,8 @@ export default function Dashboard() {
                 overflow-x-hidden
                 p-6
                 space-y-5
-                break-words
                 bg-gray-50
+                min-w-0
               "
             >
               {messages.length === 0 && (
@@ -524,19 +768,21 @@ export default function Dashboard() {
               {messages.map((message, index) => (
                 <div
                   key={index}
-                  className={`flex ${
+                  className={`flex min-w-0 ${
                     message.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
                   <div
                     className={`
-                      max-w-[75%] 
-                      overflow-hidden 
-                      break-words 
-                      whitespace-pre-wrap
+                      max-w-[75%]
+                      min-w-0
+                      overflow-hidden
                       p-4
                       rounded-2xl
                       shadow-sm
+                      leading-relaxed
+                      break-words
+                      [overflow-wrap:anywhere]
                       ${
                         message.role === "user"
                           ? "bg-blue-100 text-gray-900 border border-blue-400"
@@ -563,7 +809,23 @@ export default function Dashboard() {
                         : "🤖 LLM"}
                     </div>
 
-                    <div className="prose max-w-none whitespace-pre-wrap break-words overflow-hidden">
+                    <div
+                      className="
+                        prose
+                        max-w-none
+                        min-w-0
+                        leading-relaxed
+                        break-words
+                        [overflow-wrap:anywhere]
+                        overflow-hidden
+                        [&_*]:max-w-full
+                        [&_*]:break-words
+                        [&_*]:[overflow-wrap:anywhere]
+                        [&_pre]:leading-relaxed
+                        [&_pre]:overflow-x-auto
+                        [&_code]:whitespace-pre-wrap
+                      "
+                    >
                       <MarkdownRenderer content={message.content} />
                     </div>
 
@@ -588,8 +850,8 @@ export default function Dashboard() {
             </div>
 
             {/* CHAT INPUT */}
-            <div className="p-4 border-t bg-white">
-              <div className="flex gap-3">
+            <div className="p-4 border-t bg-white shrink-0">
+              <div className="flex gap-3 min-w-0">
                 <textarea
                   value={userInput}
                   onChange={(e) => setUserInput(e.target.value)}
@@ -609,8 +871,9 @@ export default function Dashboard() {
                     focus:outline-none
                     focus:ring-2
                     focus:ring-blue-400
+                    min-w-0
                   "
-                  placeholder={conversationStarted ? "Type ..." : "Type ..."}
+                  placeholder="Type ..."
                 />
 
                 <button
@@ -623,6 +886,7 @@ export default function Dashboard() {
                     rounded-xl
                     transition
                     font-semibold
+                    shrink-0
                   "
                 >
                   {loading ? "..." : "Send"}
@@ -635,57 +899,239 @@ export default function Dashboard() {
         {/* RIGHT PANEL */}
         <div
           className="
-            w-[18%]
+            w-[22%]
             bg-purple-500
             border-l
             p-4
-            overflow-y-auto
+            flex
+            flex-col
+            overflow-hidden
+            min-w-0
           "
         >
-          <div className="bg-gray-200 p-4 rounded-xl mb-6">
-            <h2 className="text-black font-bold mb-2">🤖 Modèle LLM</h2>
+          {/* SCROLLABLE CONTENT */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1">
+            <div className="bg-gray-200 p-4 rounded-xl mb-6">
+              <h2 className="text-black font-bold mb-2">🤖 Modèle LLM</h2>
 
-            <p className="text-sm text-blue-700 break-all">{model}</p>
+              <p className="text-sm text-blue-700 break-all">{model}</p>
 
-            <p className="text-sm text-gray-600">via OpenRouter</p>
-          </div>
+              <p className="text-sm text-gray-600">via OpenRouter</p>
+            </div>
 
-          <h2 className="text-xl font-bold mb-4 text-white">🧠 Stratégies</h2>
+            <h2 className="text-xl font-bold mb-4 text-white">🧠 Stratégies</h2>
 
-          <div className="space-y-3">
-            {strategies.map((strategy, index) => (
-              <label
-                key={strategy.id || index}
+            <label
+              className="
+                mb-3
+                w-full
+                p-3
+                rounded-xl
+                bg-green-500
+                hover:bg-green-600
+                text-white
+                font-semibold
+                text-center
+                cursor-pointer
+                transition
+                block
+              "
+            >
+              ➕ Upload strategy
+              <input
+                type="file"
+                accept=".txt"
+                onChange={uploadStrategy}
+                className="hidden"
+              />
+            </label>
+
+            <button
+              onClick={() => setShowStrategyForm(!showStrategyForm)}
+              className="
+                mb-4
+                w-full
+                p-3
+                rounded-xl
+                bg-slate-700
+                hover:bg-slate-800
+                text-white
+                font-semibold
+                transition
+              "
+            >
+              ✍️ Write strategy
+            </button>
+
+            {showStrategyForm && (
+              <div
                 className="
-                  flex
-                  items-start
-                  gap-3
+                  mb-4
+                  bg-white
                   p-3
-                  bg-gray-600
-                  text-white
                   rounded-xl
-                  hover:bg-gray-700
-                  transition
-                  cursor-pointer
+                  border
+                  border-purple-700
                 "
               >
                 <input
-                  type="radio"
-                  name="strategy"
-                  className="w-5 h-5 mt-1"
-                  checked={selectedStrategy?.id === strategy.id}
-                  onChange={() => handleStrategySelect(strategy)}
+                  value={newStrategyTitle}
+                  onChange={(e) => setNewStrategyTitle(e.target.value)}
+                  placeholder="Strategy title ..."
+                  className="
+                    w-full
+                    mb-2
+                    p-2
+                    rounded
+                    text-black
+                    outline-none
+                  "
                 />
 
-                <div>
-                  <div className="font-bold">✨ {strategy.title}</div>
+                <textarea
+                  value={newStrategyContent}
+                  onChange={(e) => setNewStrategyContent(e.target.value)}
+                  placeholder={`Describe the strategy.`}
+                  className="
+                    w-full
+                    h-40
+                    mb-2
+                    p-2
+                    rounded
+                    text-black
+                    resize-none
+                    outline-none
+                  "
+                />
 
-                  <div className="text-sm text-gray-300 mt-1">
-                    {strategy.prompt}
-                  </div>
+                <div className="text-xs text-gray-500 mb-3 leading-relaxed">
+                  🧠 The content will be saved as a prompt engineering strategy.
                 </div>
-              </label>
-            ))}
+
+                <button
+                  onClick={() =>
+                    editingStrategy ? updateStrategy() : createStrategy()
+                  }
+                  className="
+                    w-full
+                    p-2
+                    rounded
+                    bg-green-500
+                    hover:bg-green-600
+                    text-white
+                    font-semibold
+                  "
+                >
+                  {editingStrategy ? "💾 Update" : "💾 Save"}
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {strategies.map((strategy, index) => (
+                <div
+                  key={strategy.id || index}
+                  className={`
+                    flex
+                    items-start
+                    gap-2
+                    w-full
+                    p-3
+                    rounded-xl
+                    transition
+                    text-white
+                    overflow-hidden
+                    ${
+                      selectedStrategy?.id === strategy.id
+                        ? "bg-blue-500 hover:bg-blue-600"
+                        : "bg-gray-600 hover:bg-gray-700"
+                    }
+                  `}
+                >
+                  <input
+                    type="radio"
+                    name="strategy"
+                    className="w-5 h-5 mt-1 shrink-0"
+                    checked={selectedStrategy?.id === strategy.id}
+                    onChange={() => handleStrategySelect(strategy)}
+                  />
+
+                  <button
+                    onClick={() => handleStrategySelect(strategy)}
+                    className="
+                      flex-1
+                      text-left
+                      overflow-hidden
+                      min-w-0
+                    "
+                  >
+                    <div className="font-bold truncate">
+                      ✨ {strategy.title}
+                    </div>
+
+                    <div className="text-sm text-gray-200 mt-1 line-clamp-3 break-words">
+                      {strategy.prompt}
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => editStrategy(strategy)}
+                    className="
+                      w-7
+                      h-7
+                      rounded-full
+                      bg-yellow-400
+                      hover:bg-yellow-500
+                      flex
+                      items-center
+                      justify-center
+                      shrink-0
+                      text-sm
+                    "
+                    title="Update"
+                  >
+                    ✏️
+                  </button>
+
+                  <button
+                    onClick={() => deleteStrategy(strategy)}
+                    className="
+                      w-7
+                      h-7
+                      rounded-full
+                      bg-red-500
+                      hover:bg-red-600
+                      flex
+                      items-center
+                      justify-center
+                      shrink-0
+                      text-sm
+                    "
+                    title="Delete"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* FIXED TIP */}
+          <div
+            className="
+              shrink-0
+              mt-1
+              border
+              border-purple-200
+              rounded-xl
+              p-2
+              text-white
+              text-sm
+              bg-purple-900/30
+            "
+          >
+            <div className="text-purple-100 font-bold mb-2">💡 Tip</div>
+            Select or create a strategy before sending the prompt to the LLM.
           </div>
         </div>
       </div>

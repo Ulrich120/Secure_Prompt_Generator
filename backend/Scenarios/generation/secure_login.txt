@@ -1,9 +1,7 @@
-Create a secure login system.
-
-Requirements:
-
-- user registration
-- user login
-- password hashing using bcrypt
+- Create a secure login system.
+- Requirements:
+- User registration
+- User login
+- Password hashing using bcrypt
 - JWT authentication
-- input validation
+- Input validation
