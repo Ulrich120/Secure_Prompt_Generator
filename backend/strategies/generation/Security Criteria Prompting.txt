@@ -1,0 +1,7 @@
+Generate secure code that explicitly satisfies the following security criteria.
+
+For each criterion:
+- implement it in the code
+- explain where it is handled
+- avoid insecure shortcuts
+- prefer OWASP recommendations

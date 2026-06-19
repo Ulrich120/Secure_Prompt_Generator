@@ -1,6 +1,9 @@
 import { oneShot }
 from "./oneShot";
 
+import { rolePrompting } 
+from "./rolePrompting";
+
 import { selfReflexion }
 from "./selfReflexion";
 
@@ -19,6 +22,8 @@ from "./vulnerabilityAnalysis";
 export const strategyRegistry = {
 
   "One-Shot Prompting": oneShot,
+
+  "Role Prompting": rolePrompting,
 
   "Self Reflexion": selfReflexion,
 
