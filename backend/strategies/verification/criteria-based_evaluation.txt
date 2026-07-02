@@ -1,0 +1,11 @@
+Title: Criteria-Based Evaluation
+
+Evaluate the code against the security criteria from the scenario.
+
+For each criterion:
+1. respected or not
+2. evidence in the code
+3. explanation
+4. correction if needed
+
+Return a final security score.

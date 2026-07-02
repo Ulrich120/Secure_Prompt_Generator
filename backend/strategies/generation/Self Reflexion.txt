@@ -1,9 +1,0 @@
-Generate the code.
-
-Review your solution.
-
-Identify weaknesses.
-
-Improve the code.
-
-Return the final improved version.

@@ -1,0 +1,9 @@
+Title: Patch Generation
+
+Analyze the code and generate a secure patch.
+
+Output:
+1. vulnerabilities found
+2. patch explanation
+3. corrected code
+4. tests or validation steps

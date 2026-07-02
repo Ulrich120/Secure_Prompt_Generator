@@ -1,0 +1,15 @@
+
+      - Task:
+- Create a secure file upload feature.
+- Requirements:
+- Allow-list of file extensions
+- MIME type validation
+- File signature validation
+- Maximum file size
+- Random server-side filename
+- Store files outside the web root
+- Require authentication
+- Protect upload route against CSRF
+- Reject dangerous files
+- Expected Output:
+- Generate secure code and explain each protection.

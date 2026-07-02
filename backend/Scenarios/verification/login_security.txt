@@ -1,0 +1,13 @@
+- Task:
+- Analyze the provided login code for security vulnerabilities.
+- Check for:
+- Weak password handling
+- Missing rate limiting
+- Account enumeration
+- Missing account lockout
+- Missing MFA
+- Insecure error messages
+- Missing logging
+- SQL injection risks
+- Expected Output:
+- List vulnerabilities, severity, explanation, and corrected code.

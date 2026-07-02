@@ -4,12 +4,36 @@ import { useParams } from "react-router-dom";
 import { buildPrompt } from "../utils/promptBuilder";
 import { runPromptChain } from "../utils/promptChain";
 import MarkdownRenderer from "../components/MarkdownRenderer";
+import { exportAuditReport } from "../utils/pdfExporter";
+import { analyzeSecurityFeatures } from "../utils/securityAnalyzer";
 
 export default function Dashboard() {
   const { mode } = useParams();
+  const currentMode = mode || "generation";
 
-  const model = "deepseek/deepseek-chat-v3-0324";
+  /* LLM MODELS */
+  const models = [
+    {
+      label: "DeepSeek Chat V3",
+      value: "deepseek/deepseek-chat-v3-0324",
+    },
+    {
+      label: "Mistral Small",
+      value: "mistralai/mistral-small-3.1-24b-instruct",
+    },
+    {
+      label: "Qwen 2.5 Coder",
+      value: "qwen/qwen-2.5-coder-32b-instruct",
+    },
+    {
+      label: "Llama 3.3",
+      value: "meta-llama/llama-3.3-70b-instruct",
+    },
+  ];
 
+  const [model, setModel] = useState(models[0].value);
+
+  /* USE STATE */
   const [scenarios, setScenarios] = useState([]);
   const [strategies, setStrategies] = useState([]);
 
@@ -23,6 +47,11 @@ export default function Dashboard() {
 
   const [messages, setMessages] = useState([]);
   const [conversationStarted, setConversationStarted] = useState(false);
+  const [activeConversationId, setActiveConversationId] = useState(null);
+  const [chatLocked, setChatLocked] = useState(false);
+  const [showChangeDialog, setShowChangeDialog] = useState(false);
+  const [pendingChange, setPendingChange] = useState(null);
+  const [chatDirty, setChatDirty] = useState(false);
 
   const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,7 +61,16 @@ export default function Dashboard() {
   const [editingScenario, setEditingScenario] = useState(null);
   const [showScenarioForm, setShowScenarioForm] = useState(false);
 
+  const [savedConversations, setSavedConversations] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+
+  const [securityChecks, setSecurityChecks] = useState([]);
+
   const bottomRef = useRef(null);
+  const messagesRef = useRef([]);
+
+  const storageKey = `secure_prompt_chat_${mode}`;
 
   const getTime = () =>
     new Date().toLocaleTimeString([], {
@@ -40,14 +78,13 @@ export default function Dashboard() {
       minute: "2-digit",
     });
 
-  const refreshStrategies = async () => {
-    try {
-      const response = await fetch(`http://127.0.0.1:8000/strategies/${mode}`);
-      const data = await response.json();
-      setStrategies(data);
-    } catch (error) {
-      console.error(error);
-    }
+  const refreshStrategies = async (modeToLoad = currentMode) => {
+    const response = await fetch(
+      `http://127.0.0.1:8000/strategies/${modeToLoad}`,
+    );
+
+    const data = await response.json();
+    setStrategies(data);
   };
 
   const createStrategy = async () => {
@@ -60,7 +97,7 @@ export default function Dashboard() {
         },
 
         body: JSON.stringify({
-          mode,
+          mode: currentMode,
           title: newStrategyTitle,
           content: newStrategyContent,
         }),
@@ -96,7 +133,7 @@ export default function Dashboard() {
         },
 
         body: JSON.stringify({
-          mode,
+          mode: currentMode,
           old_title: editingStrategy.title,
           new_title: newStrategyTitle,
           content: newStrategyContent,
@@ -131,7 +168,7 @@ export default function Dashboard() {
         },
 
         body: JSON.stringify({
-          mode,
+          mode: currentMode,
           title: strategy.title,
         }),
       });
@@ -152,7 +189,7 @@ export default function Dashboard() {
 
       formData.append("file", file);
 
-      formData.append("mode", mode);
+      formData.append("mode", currentMode);
 
       await fetch("http://127.0.0.1:8000/upload-strategy", {
         method: "POST",
@@ -165,14 +202,13 @@ export default function Dashboard() {
     }
   };
 
-  const refreshScenarios = async () => {
-    try {
-      const response = await fetch(`http://127.0.0.1:8000/scenarios/${mode}`);
-      const data = await response.json();
-      setScenarios(data);
-    } catch (error) {
-      console.error(error);
-    }
+  const refreshScenarios = async (modeToLoad = currentMode) => {
+    const response = await fetch(
+      `http://127.0.0.1:8000/scenarios/${modeToLoad}`,
+    );
+
+    const data = await response.json();
+    setScenarios(data);
   };
 
   const formatScenarioStrategyBubble = (scenario, strategy) => {
@@ -203,50 +239,94 @@ export default function Dashboard() {
     });
   };
 
+  const requestChatChange = (type, value) => {
+    const hasLLMResponse = messages.some((msg) => msg.role === "assistant");
+
+    const hasRealConversation = chatLocked && hasLLMResponse;
+
+    if (!hasRealConversation) {
+      if (type === "scenario") {
+        setSelectedScenario(value);
+        updateScenarioStrategyBubble(value, selectedStrategy);
+      }
+
+      if (type === "strategy") {
+        setSelectedStrategy(value);
+        updateScenarioStrategyBubble(selectedScenario, value);
+      }
+
+      setConversationStarted(false);
+      setActiveConversationId(null);
+      return;
+    }
+
+    setPendingChange({ type, value });
+    setShowChangeDialog(true);
+  };
+
   const handleScenarioSelect = (scenario) => {
-    setSelectedScenario(scenario);
-    updateScenarioStrategyBubble(scenario, selectedStrategy);
-    setConversationStarted(false);
+    requestChatChange("scenario", scenario);
   };
 
   const handleStrategySelect = (strategy) => {
-    setSelectedStrategy(strategy);
-    updateScenarioStrategyBubble(selectedScenario, strategy);
-    setConversationStarted(false);
+    requestChatChange("strategy", strategy);
   };
 
+  /* USE EFFECT */
+
+  /* 1. Quand le mode change : reset propre + chargement des données du mode */
   useEffect(() => {
-    const fetchScenarios = async () => {
+    const handleModeChange = async () => {
       try {
         setLoading(true);
-        await refreshScenarios();
+
+        setMessages([]);
+        messagesRef.current = [];
+
+        setSelectedScenario(null);
+        setSelectedStrategy(null);
+
+        setConversationStarted(false);
+        setActiveConversationId(null);
+        setChatLocked(false);
+        setChatDirty(false);
+
+        setUserInput("");
+        setHistorySearch("");
+        setShowChangeDialog(false);
+        setPendingChange(null);
+
+        localStorage.removeItem(`secure_prompt_chat_${currentMode}`);
+
+        await refreshScenarios(currentMode);
+        await refreshStrategies(currentMode);
+        await loadConversations(currentMode);
       } catch (error) {
-        console.error("Erreur lors du chargement des scénarios :", error);
+        console.error("Mode change error:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchScenarios();
-  }, [mode]);
+    handleModeChange();
+  }, [currentMode]);
 
+  /* 2. Garder messagesRef synchronisé */
   useEffect(() => {
-    refreshStrategies();
-  }, [mode]);
+    messagesRef.current = messages;
+  }, [messages]);
 
-  useEffect(() => {
-    setSelectedScenario(null);
-    setSelectedStrategy(null);
-    setMessages([]);
-    setConversationStarted(false);
-    setUserInput("");
-  }, [mode]);
-
+  /* 3. Scroll automatique vers le dernier message */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({
       behavior: "smooth",
     });
   }, [messages, loading]);
+
+  /* 4. Sauvegarde locale temporaire du chat courant */
+  useEffect(() => {
+    localStorage.setItem(storageKey, JSON.stringify(messages));
+  }, [messages, storageKey]);
 
   const sendToLLM = async () => {
     if (!selectedScenario || !selectedStrategy) {
@@ -261,11 +341,20 @@ export default function Dashboard() {
     try {
       setLoading(true);
 
+      const userMessage = userInput.trim()
+        ? {
+            role: "user",
+            type: "message",
+            content: userInput,
+            timestamp: getTime(),
+          }
+        : null;
+
       let promptToSend = "";
 
       if (!conversationStarted) {
         promptToSend = buildPrompt({
-          mode,
+          mode: currentMode,
           scenario: selectedScenario,
           strategy: selectedStrategy,
           userInput,
@@ -273,27 +362,20 @@ export default function Dashboard() {
 
         setConversationStarted(true);
       } else {
+        const historyForPrompt = [
+          ...messagesRef.current,
+          ...(userMessage ? [userMessage] : []),
+        ];
+
         promptToSend = `
           You are continuing a conversation.
 
           Previous conversation:
-          ${messages.map((msg) => `${msg.role}: ${msg.content}`).join("\n\n")}
+          ${historyForPrompt.map((msg) => `${msg.role}: ${msg.content}`).join("\n\n")}
 
           User question:
           ${userInput}
         `;
-      }
-
-      if (userInput.trim()) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "user",
-            type: "message",
-            content: userInput,
-            timestamp: getTime(),
-          },
-        ]);
       }
 
       const result = await runPromptChain({
@@ -302,29 +384,41 @@ export default function Dashboard() {
         selectedModel: model,
       });
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          type: "response",
-          content: result.finalResponse,
-          timestamp: getTime(),
-        },
-      ]);
+      const assistantMessage = {
+        role: "assistant",
+        type: "response",
+        content: result.finalResponse,
+        timestamp: getTime(),
+        securityChecks: analyzeSecurityFeatures(result.finalResponse),
+      };
+      console.log("ASSISTANT MESSAGE:", assistantMessage);
+
+      const updatedMessages = [
+        ...messagesRef.current,
+        ...(userMessage ? [userMessage] : []),
+        assistantMessage,
+      ];
+
+      setMessages(updatedMessages);
+      messagesRef.current = updatedMessages;
 
       setUserInput("");
+      setChatDirty(true);
+      setChatLocked(true);
     } catch (error) {
       console.error(error);
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          type: "error",
-          content: "Erreur lors de la génération.",
-          timestamp: getTime(),
-        },
-      ]);
+      const errorMessage = {
+        role: "assistant",
+        type: "error",
+        content: "Erreur lors de la génération.",
+        timestamp: getTime(),
+      };
+
+      const updatedMessages = [...messagesRef.current, errorMessage];
+
+      setMessages(updatedMessages);
+      messagesRef.current = updatedMessages;
     } finally {
       setLoading(false);
     }
@@ -337,7 +431,7 @@ export default function Dashboard() {
 
     const formData = new FormData();
 
-    formData.append("mode", mode);
+    formData.append("mode", currentMode);
     formData.append("file", file);
 
     try {
@@ -378,7 +472,7 @@ export default function Dashboard() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        mode,
+        mode: currentMode,
         title: newScenarioTitle,
         content: formattedContent,
       }),
@@ -420,7 +514,7 @@ export default function Dashboard() {
         },
 
         body: JSON.stringify({
-          mode,
+          mode: currentMode,
           old_title: editingScenario.title,
           new_title: newScenarioTitle,
           content: formattedContent,
@@ -452,7 +546,7 @@ export default function Dashboard() {
         },
 
         body: JSON.stringify({
-          mode,
+          mode: currentMode,
           title: scenario.title,
         }),
       });
@@ -467,11 +561,227 @@ export default function Dashboard() {
     }
   };
 
+  const loadConversations = async (modeToLoad = currentMode) => {
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/conversations?mode=${modeToLoad}`,
+      );
+
+      const data = await response.json();
+
+      console.log("MODE HISTORIQUE:", modeToLoad);
+      console.log("CONVERSATIONS:", data);
+
+      setSavedConversations(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Load conversations error:", error);
+      setSavedConversations([]);
+    }
+  };
+
+  const saveConversation = async (messagesToSave = messagesRef.current) => {
+    if (!messagesToSave || messagesToSave.length === 0) return;
+
+    const hasLLMResponse = messagesToSave.some(
+      (msg) => msg.role === "assistant",
+    );
+
+    if (!hasLLMResponse) return;
+
+    const title = `${selectedScenario?.title || "Scenario"} - ${
+      selectedStrategy?.title || "Strategy"
+    }`;
+
+    const payload = {
+      mode: currentMode,
+      title,
+      scenario_title: selectedScenario?.title || "",
+      strategy_title: selectedStrategy?.title || "",
+      model,
+      messages: messagesToSave,
+    };
+
+    if (activeConversationId) {
+      await fetch(
+        `http://127.0.0.1:8000/conversations/${activeConversationId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+    } else {
+      const response = await fetch("http://127.0.0.1:8000/save-conversation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (data.id) {
+        setActiveConversationId(data.id);
+      }
+    }
+
+    setChatDirty(false);
+    await loadConversations();
+  };
+
+  const openConversation = async (id) => {
+    setShowChangeDialog(false);
+    setPendingChange(null);
+
+    const response = await fetch(`http://127.0.0.1:8000/conversations/${id}`);
+    const data = await response.json();
+
+    const restoredMessages = data.messages || [];
+
+    setMessages(restoredMessages);
+    messagesRef.current = restoredMessages;
+
+    const lastAssistant = [...restoredMessages]
+      .reverse()
+      .find((msg) => msg.role === "assistant");
+
+    if (lastAssistant) {
+      setSecurityChecks(analyzeSecurityFeatures(lastAssistant.content));
+    } else {
+      setSecurityChecks([]);
+    }
+
+    setConversationStarted(true);
+    setActiveConversationId(data.id);
+    setChatDirty(false);
+    setChatLocked(true);
+
+    if (data.model) {
+      setModel(data.model);
+    }
+
+    const matchingScenario = scenarios.find(
+      (scenario) => scenario.title === data.scenario_title,
+    );
+
+    if (matchingScenario) {
+      setSelectedScenario(matchingScenario);
+    }
+
+    const matchingStrategy = strategies.find(
+      (strategy) => strategy.title === data.strategy_title,
+    );
+
+    if (matchingStrategy) {
+      setSelectedStrategy(matchingStrategy);
+    }
+  };
+
+  const confirmChatChange = () => {
+    if (messages.length === 0) return true;
+
+    return window.confirm(
+      "Un chat est en cours. Sauvegardez ou terminez ce chat avant de changer de scénario ou de stratégie. Voulez-vous vraiment changer ?",
+    );
+  };
+
+  const deleteSavedConversation = async (id) => {
+    if (!window.confirm("Supprimer cette conversation ?")) return;
+
+    await fetch(`http://127.0.0.1:8000/conversations/${id}`, {
+      method: "DELETE",
+    });
+
+    await loadConversations();
+  };
+
+  const cancelChange = () => {
+    setPendingChange(null);
+    setShowChangeDialog(false);
+  };
+
+  const confirmChange = async () => {
+    const messagesToSave = [...messagesRef.current];
+
+    await saveConversation(messagesToSave);
+
+    setMessages([]);
+    messagesRef.current = [];
+
+    setConversationStarted(false);
+    setUserInput("");
+    setActiveConversationId(null);
+    setChatLocked(false);
+
+    if (pendingChange?.type === "scenario") {
+      setSelectedScenario(pendingChange.value);
+      updateScenarioStrategyBubble(pendingChange.value, selectedStrategy);
+    }
+
+    if (pendingChange?.type === "strategy") {
+      setSelectedStrategy(pendingChange.value);
+      updateScenarioStrategyBubble(selectedScenario, pendingChange.value);
+    }
+
+    setPendingChange(null);
+    setShowChangeDialog(false);
+  };
+
+  const uploadCodeFile = async (event) => {
+    const file = event.target.files[0];
+
+    if (!file) return;
+
+    const allowedExtensions = [
+      ".js",
+      ".jsx",
+      ".ts",
+      ".txt",
+      ".tsx",
+      ".py",
+      ".java",
+      ".php",
+      ".html",
+      ".css",
+      ".sql",
+      ".json",
+    ];
+
+    const fileName = file.name.toLowerCase();
+
+    const isAllowed = allowedExtensions.some((ext) => fileName.endsWith(ext));
+
+    if (!isAllowed) {
+      alert("File type not supported.");
+      event.target.value = "";
+      return;
+    }
+
+    const content = await file.text();
+
+    setUserInput(content);
+
+    event.target.value = "";
+  };
+
+  const handleExportReport = () => {
+    exportAuditReport({
+      scenario: selectedScenario,
+      strategy: selectedStrategy,
+      model,
+      messages,
+    });
+  };
+
   return (
-    <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
-      {/* HEADER */}
-      <div
-        className="
+    <>
+      <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
+        {/* HEADER */}
+        <div
+          className="
           h-20
           bg-gray-900
           text-white
@@ -483,16 +793,16 @@ export default function Dashboard() {
           shadow-lg
           shrink-0
         "
-      >
-        🛡️ Secure Prompt Generator
-      </div>
+        >
+          🛡️ Secure Prompt Generator
+        </div>
 
-      {/* MAIN CONTENT */}
-      <div className="flex flex-1 overflow-hidden min-w-0">
-        {/* LEFT PANEL */}
-        <div
-          className="
-            w-[20%]
+        {/* MAIN CONTENT */}
+        <div className="flex flex-1 overflow-hidden min-w-0">
+          {/* LEFT PANEL */}
+          <div
+            className="
+            w-[22%]
             bg-slate-700
             border-r
             p-4
@@ -501,221 +811,331 @@ export default function Dashboard() {
             overflow-hidden
             min-w-0
           "
-        >
-          {/* SCROLLABLE CONTENT */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1">
-            <h2 className="text-xl font-bold mb-4 text-white">📂 Scénarios</h2>
+          >
+            {/* SCROLLABLE CONTENT */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1">
+              {/* SAVED CONVERSATIONS */}
+              <h2 className="text-xl font-bold mb-4 text-white">📂 History</h2>
 
-            <p className="text-sm text-gray-300 italic mb-4">
-              Select a Scenario
-            </p>
+              <div className="mb-4 bg-white rounded-xl p-3 shadow">
+                <input
+                  type="text"
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  placeholder="🔍 Search conversation..."
+                  className="w-full p-2 mb-3 rounded-lg border text-black outline-none"
+                />
 
-            <label
-              className="
-                mb-3
-                w-full
-                p-3
-                rounded-xl
-                bg-green-500
-                hover:bg-green-600
-                text-white
-                font-semibold
-                text-center
-                cursor-pointer
-                transition
-                block
-              "
-            >
-              ➕ Upload scénario
-              <input
-                type="file"
-                accept=".txt"
-                onChange={uploadScenario}
-                className="hidden"
-              />
-            </label>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-black">
+                    💬 Saved Conversations
+                  </h3>
 
-            <button
-              onClick={() => setShowScenarioForm(!showScenarioForm)}
-              className="
-                mb-4
-                w-full
-                p-3
-                rounded-xl
-                bg-purple-500
-                hover:bg-purple-600
-                text-white
-                font-semibold
-                transition
-              "
-            >
-              ✍️ Write scénario
-            </button>
+                  <button
+                    onClick={loadConversations}
+                    className="
+                      text-xs
+                      bg-blue-500
+                      hover:bg-blue-600
+                      text-white
+                      px-2
+                      py-1
+                      rounded-lg
+                    "
+                  >
+                    🔄
+                  </button>
+                </div>
 
-            {showScenarioForm && (
-              <div
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {savedConversations.length === 0 && (
+                    <div className="text-xs text-gray-500 italic">
+                      No saved conversations.
+                    </div>
+                  )}
+
+                  {savedConversations
+                    .filter((conversation) =>
+                      conversation.title
+                        ?.toLowerCase()
+                        .includes(historySearch.toLowerCase()),
+                    )
+                    .map((conversation) => (
+                      <div
+                        key={conversation.id}
+                        className={`
+                          flex
+                          items-center
+                          gap-2
+                          rounded-lg
+                          p-2
+                          border
+                          ${
+                            activeConversationId === conversation.id
+                              ? "bg-blue-100 border-blue-500"
+                              : "bg-gray-100 border-gray-200"
+                          }
+                        `}
+                      >
+                        <button
+                          onClick={() => openConversation(conversation.id)}
+                          className="flex-1 text-left min-w-0"
+                        >
+                          <div className="font-semibold text-sm text-black truncate">
+                            💬 {conversation.title}
+                          </div>
+
+                          <div className="text-xs text-gray-500 truncate">
+                            📂 {conversation.scenario_title || "No scenario"}
+                          </div>
+
+                          <div className="text-xs text-gray-500 truncate">
+                            🧠 {conversation.strategy_title || "No strategy"}
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            deleteSavedConversation(conversation.id)
+                          }
+                          className="
+                            w-6
+                            h-6
+                            rounded-full
+                            bg-red-500
+                            hover:bg-red-600
+                            text-white
+                            text-xs
+                            flex
+                            items-center
+                            justify-center
+                            shrink-0
+                          "
+                          title="Delete"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              <h2 className="text-xl font-bold mb-4 text-white">
+                📂 Scénarios
+              </h2>
+
+              <p className="text-sm text-gray-300 italic mb-4">
+                Select a Scenario
+              </p>
+
+              <label
                 className="
-                  mb-4
-                  bg-white
+                  mb-3
+                  w-full
                   p-3
                   rounded-xl
-                  border
-                  border-slate-500
+                  bg-green-500
+                  hover:bg-green-600
+                  text-white
+                  font-semibold
+                  text-center
+                  cursor-pointer
+                  transition
+                  block
                 "
               >
+                ➕ Upload scénario
                 <input
-                  value={newScenarioTitle}
-                  onChange={(e) => setNewScenarioTitle(e.target.value)}
-                  placeholder="Title ... "
-                  className="
-                    w-full
-                    mb-2
-                    p-2
-                    rounded
-                    text-black
-                    outline-none
-                  "
+                  type="file"
+                  accept=".txt"
+                  onChange={uploadScenario}
+                  className="hidden"
                 />
+              </label>
 
-                <textarea
-                  value={newScenarioContent}
-                  onChange={(e) => setNewScenarioContent(e.target.value)}
-                  placeholder={`Describe the scenario`}
-                  className="
-                    w-full
-                    h-40
-                    mb-2
-                    p-2
-                    rounded
-                    text-black
-                    resize-none
-                    outline-none
-                  "
-                />
+              <button
+                onClick={() => setShowScenarioForm(!showScenarioForm)}
+                className="
+                  mb-4
+                  w-full
+                  p-3
+                  rounded-xl
+                  bg-purple-500
+                  hover:bg-purple-600
+                  text-white
+                  font-semibold
+                  transition
+                "
+              >
+                ✍️ Write scénario
+              </button>
 
-                <div className="text-xs text-gray-500 mb-3 leading-relaxed">
-                  📄 The content will be automatically structured in the text
-                  file.
-                </div>
-
-                <button
-                  onClick={() =>
-                    editingScenario ? updateScenario() : createScenario()
-                  }
-                  className="
-                    w-full
-                    p-2
-                    rounded
-                    bg-green-500
-                    hover:bg-green-600
-                    text-white
-                    font-semibold
-                  "
-                >
-                  {editingScenario ? "💾 Update" : "💾 Save"}
-                </button>
-              </div>
-            )}
-
-            <div className="space-y-3">
-              {scenarios.map((scenario, index) => (
+              {showScenarioForm && (
                 <div
-                  key={scenario.id || index}
-                  className={`
-                    flex
-                    items-center
-                    gap-2
-                    w-full
+                  className="
+                    mb-4
+                    bg-white
                     p-3
                     rounded-xl
-                    transition
-                    text-white
-                    overflow-hidden
-                    ${
-                      selectedScenario?.id === scenario.id
-                        ? "bg-blue-500 hover:bg-blue-600"
-                        : "bg-gray-500 hover:bg-gray-600"
-                    }
-                  `}
+                    border
+                    border-slate-500
+                  "
                 >
-                  <button
-                    onClick={() => handleScenarioSelect(scenario)}
+                  <input
+                    value={newScenarioTitle}
+                    onChange={(e) => setNewScenarioTitle(e.target.value)}
+                    placeholder="Title ... "
                     className="
-                      flex-1
-                      text-left
+                      w-full
+                      mb-2
+                      p-2
+                      rounded
+                      text-black
+                      outline-none
+                    "
+                  />
+
+                  <textarea
+                    value={newScenarioContent}
+                    onChange={(e) => setNewScenarioContent(e.target.value)}
+                    placeholder="Describe the scenario"
+                    className="
+                      w-full
+                      h-40
+                      mb-2
+                      p-2
+                      rounded
+                      text-black
+                      resize-none
+                      outline-none
+                    "
+                  />
+
+                  <div className="text-xs text-gray-500 mb-3 leading-relaxed">
+                    📄 The content will be automatically structured in the text
+                    file.
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      editingScenario ? updateScenario() : createScenario()
+                    }
+                    className="
+                      w-full
+                      p-2
+                      rounded
+                      bg-green-500
+                      hover:bg-green-600
+                      text-white
                       font-semibold
-                      overflow-hidden
-                      min-w-0
                     "
                   >
-                    <span className="block truncate">📄 {scenario.title}</span>
-                  </button>
-
-                  <button
-                    onClick={() => editScenario(scenario)}
-                    className="
-                      w-7
-                      h-7
-                      rounded-full
-                      bg-yellow-400
-                      hover:bg-yellow-500
-                      flex
-                      items-center
-                      justify-center
-                      shrink-0
-                      text-sm
-                    "
-                    title="Modifier"
-                  >
-                    ✏️
-                  </button>
-
-                  <button
-                    onClick={() => deleteScenario(scenario)}
-                    className="
-                      w-7
-                      h-7
-                      rounded-full
-                      bg-red-500
-                      hover:bg-red-600
-                      flex
-                      items-center
-                      justify-center
-                      shrink-0
-                      text-sm
-                    "
-                    title="Supprimer"
-                  >
-                    🗑️
+                    {editingScenario ? "💾 Update" : "💾 Save"}
                   </button>
                 </div>
-              ))}
+              )}
+
+              <div className="space-y-3">
+                {scenarios.map((scenario, index) => (
+                  <div
+                    key={scenario.id || index}
+                    className={`
+                      flex
+                      items-center
+                      gap-2
+                      w-full
+                      p-3
+                      rounded-xl
+                      transition
+                      text-white
+                      overflow-hidden
+                      ${
+                        selectedScenario?.id === scenario.id
+                          ? "bg-blue-500 hover:bg-blue-600"
+                          : "bg-gray-500 hover:bg-gray-600"
+                      }
+                    `}
+                  >
+                    <button
+                      onClick={() => handleScenarioSelect(scenario)}
+                      className="
+                        flex-1
+                        text-left
+                        font-semibold
+                        overflow-hidden
+                        min-w-0
+                      "
+                    >
+                      <span className="block truncate">
+                        📄 {scenario.title}
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => editScenario(scenario)}
+                      className="
+                        w-7
+                        h-7
+                        rounded-full
+                        bg-yellow-400
+                        hover:bg-yellow-500
+                        flex
+                        items-center
+                        justify-center
+                        shrink-0
+                        text-sm
+                      "
+                      title="Modifier"
+                    >
+                      ✏️
+                    </button>
+
+                    <button
+                      onClick={() => deleteScenario(scenario)}
+                      className="
+                        w-7
+                        h-7
+                        rounded-full
+                        bg-red-500
+                        hover:bg-red-600
+                        flex
+                        items-center
+                        justify-center
+                        shrink-0
+                        text-sm
+                      "
+                      title="Delete"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* FIXED TIP */}
+            <div
+              className="
+                shrink-0
+                mt-2
+                border
+                border-blue-400
+                rounded-xl
+                p-2
+                text-white
+                text-sm
+                bg-slate-800/40
+              "
+            >
+              <div className="text-blue-300 font-bold mb-2">💡 Tip</div>
+              Choose a scenario and a strategy, then begin interacting with the
+              LLM.
             </div>
           </div>
 
-          {/* FIXED TIP */}
+          {/* CENTER PANEL */}
           <div
             className="
-              shrink-0
-              mt-2
-              border
-              border-blue-400
-              rounded-xl
-              p-2
-              text-white
-              text-sm
-              bg-slate-800/40
-            "
-          >
-            <div className="text-blue-300 font-bold mb-2">💡 Tip</div>
-            Choose a scenario and a strategy, then begin interacting with the
-            LLM.
-          </div>
-        </div>
-
-        {/* CENTER PANEL */}
-        <div
-          className="
             w-[60%]
             flex
             flex-col
@@ -724,9 +1144,9 @@ export default function Dashboard() {
             overflow-hidden
             min-w-0
           "
-        >
-          <div
-            className="
+          >
+            <div
+              className="
               bg-white
               rounded-2xl
               shadow
@@ -736,20 +1156,83 @@ export default function Dashboard() {
               overflow-hidden
               min-w-0
             "
-          >
-            {/* CHAT HEADER */}
-            <div className="p-4 border-b shrink-0">
-              <h2 className="text-xl font-bold">💬 Chat with LLM</h2>
+            >
+              {/* CHAT HEADER */}
+              <div
+                className="
+                p-4
+                border-b
+                shrink-0
+                flex
+                justify-between
+                items-start
+              "
+              >
+                {/* LEFT SIDE */}
+                <div>
+                  <h2 className="text-xl font-bold">💬 Chat with LLM</h2>
 
-              <p className="text-sm text-gray-500 mt-1">
-                The scenario and strategy are combined into a single user chat
-                bubble.
-              </p>
-            </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    The scenario and strategy are combined into a single user
+                    chat bubble.
+                  </p>
+                </div>
 
-            {/* CHAT MESSAGES */}
-            <div
-              className="
+                {/* RIGHT SIDE */}
+                <button
+                  onClick={async () => {
+                    const messagesToSave = [...messagesRef.current];
+
+                    await saveConversation(messagesToSave);
+
+                    setMessages([]);
+                    setSecurityChecks([]);
+                    messagesRef.current = [];
+
+                    setConversationStarted(false);
+                    setUserInput("");
+                    setSelectedScenario(null);
+                    setSelectedStrategy(null);
+                    setActiveConversationId(null);
+                    setChatDirty(false);
+                    setChatLocked(false);
+                    localStorage.removeItem(storageKey);
+                  }}
+                  className="
+                  px-4
+                  py-2
+                  bg-purple-500
+                  hover:bg-purple-500
+                  text-white
+                  rounded-lg
+                  text-sm
+                  font-semibold
+                  shrink-0
+                "
+                >
+                  🧹 New Chat
+                </button>
+
+                <button
+                  onClick={handleExportReport}
+                  className="
+                    px-4
+                    py-2
+                    bg-blue-500
+                    hover:bg-blue-600
+                    text-white
+                    rounded-lg
+                    text-sm
+                    font-semibold
+                  "
+                >
+                  📄 Export Report
+                </button>
+              </div>
+
+              {/* CHAT MESSAGES */}
+              <div
+                className="
                 flex-1
                 overflow-y-auto
                 overflow-x-hidden
@@ -758,22 +1241,22 @@ export default function Dashboard() {
                 bg-gray-50
                 min-w-0
               "
-            >
-              {messages.length === 0 && (
-                <div className="text-center text-gray-400 italic mt-20">
-                  🚀 Select a scenario and a strategy to get started.
-                </div>
-              )}
+              >
+                {messages.length === 0 && (
+                  <div className="text-center text-gray-400 italic mt-20">
+                    🚀 Select a scenario and a strategy to get started.
+                  </div>
+                )}
 
-              {messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`flex min-w-0 ${
-                    message.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
+                {messages.map((message, index) => (
                   <div
-                    className={`
+                    key={index}
+                    className={`flex min-w-0 ${
+                      message.role === "user" ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <div
+                      className={`
                       max-w-[75%]
                       min-w-0
                       overflow-hidden
@@ -789,79 +1272,189 @@ export default function Dashboard() {
                           : "bg-purple-100 text-purple-950 border border-purple-300"
                       }
                     `}
-                  >
-                    <div
-                      className={`
-                        text-xs
-                        font-bold
-                        mb-2
-                        ${
-                          message.role === "user"
-                            ? "text-blue-700"
-                            : "text-purple-700"
-                        }
-                      `}
                     >
-                      {message.role === "user"
-                        ? message.type === "config"
-                          ? "👤 You — Scénario + Stratégie"
-                          : "👤 You"
-                        : "🤖 LLM"}
-                    </div>
+                      <div
+                        className={`
+                          text-xs
+                          font-bold
+                          mb-2
+                          ${
+                            message.role === "user"
+                              ? "text-blue-700"
+                              : "text-purple-700"
+                          }
+                        `}
+                      >
+                        <div
+                          className={`
+                            text-xs
+                            font-bold
+                            mb-2
+                            flex
+                            items-center
+                            justify-between
+                            gap-3
+                            ${
+                              message.role === "user"
+                                ? "text-blue-700"
+                                : "text-purple-700"
+                            }
+                          `}
+                        >
+                          <span>
+                            {message.role === "user"
+                              ? message.type === "config"
+                                ? "👤 You — Scénario + Stratégie"
+                                : "👤 You"
+                              : "🤖 LLM"}
+                          </span>
 
-                    <div
+                          {message.role === "assistant" && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(
+                                    message.content,
+                                  );
+                                  alert("Réponse copiée !");
+                                } catch (error) {
+                                  console.error("Copy error:", error);
+                                  alert("Impossible de copier la réponse.");
+                                }
+                              }}
+                              className="
+                                px-2
+                                py-1
+                                text-xs
+                                rounded-lg
+                                bg-gray-500
+                                hover:bg-purple-300
+                                text-purple-800
+                                transition
+                              "
+                            >
+                              📋 Copy
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div
+                        className="
+                          prose
+                          max-w-none
+                          min-w-0
+                          leading-relaxed
+                          break-words
+                          [overflow-wrap:anywhere]
+                          overflow-hidden
+                          [&_*]:max-w-full
+                          [&_*]:break-words
+                          [&_*]:[overflow-wrap:anywhere]
+                          [&_pre]:leading-relaxed
+                          [&_pre]:overflow-x-auto
+                          [&_code]:whitespace-pre-wrap
+                        "
+                      >
+                        <MarkdownRenderer content={message.content} />
+
+                        {message.role === "assistant" &&
+                          message.securityChecks &&
+                          message.securityChecks.length > 0 && (
+                            <div className="mt-6 bg-white rounded-2xl border p-5 shadow-sm">
+                              <h3 className="text-lg font-bold mb-4 text-purple-900">
+                                🛡 Security Checklist
+                              </h3>
+
+                              <div className="grid grid-cols-2 gap-3">
+                                {message.securityChecks.map((check) => (
+                                  <div
+                                    key={check.label}
+                                    className={`
+                                      flex
+                                      items-center
+                                      gap-3
+                                      rounded-xl
+                                      px-4
+                                      py-3
+                                      text-sm
+                                      font-semibold
+                                      ${
+                                        check.found
+                                          ? "bg-green-50 text-green-700"
+                                          : "bg-red-50 text-red-700"
+                                      }
+                                    `}
+                                  >
+                                    <span>{check.found ? "✅" : "❌"}</span>
+                                    <span>{check.label}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                      </div>
+
+                      {message.timestamp && (
+                        <div className="text-right text-xs text-gray-400 mt-2">
+                          {message.timestamp}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {loading && (
+                  <div className="flex justify-start">
+                    <div className="bg-purple-100 border border-purple-200 p-4 rounded-2xl shadow-sm text-purple-800 italic">
+                      🤖 Thinking ...
+                    </div>
+                  </div>
+                )}
+
+                <div ref={bottomRef}></div>
+              </div>
+
+              {/* CHAT INPUT */}
+              <div className="p-4 border-t bg-white shrink-0">
+                <div className="flex gap-3 min-w-0">
+                  {currentMode === "verification" && (
+                    <label
                       className="
-                        prose
-                        max-w-none
-                        min-w-0
-                        leading-relaxed
-                        break-words
-                        [overflow-wrap:anywhere]
-                        overflow-hidden
-                        [&_*]:max-w-full
-                        [&_*]:break-words
-                        [&_*]:[overflow-wrap:anywhere]
-                        [&_pre]:leading-relaxed
-                        [&_pre]:overflow-x-auto
-                        [&_code]:whitespace-pre-wrap
+                        px-4
+                        bg-gray-700
+                        hover:bg-gray-800
+                        text-white
+                        rounded-xl
+                        transition
+                        font-semibold
+                        flex
+                        items-center
+                        justify-center
+                        cursor-pointer
+                        shrink-0
                       "
                     >
-                      <MarkdownRenderer content={message.content} />
-                    </div>
+                      📎 Code
+                      <input
+                        type="file"
+                        accept=".js,.jsx,.ts,.tsx,.py,.java,.php,.html,.css,.sql,.json"
+                        onChange={uploadCodeFile}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
 
-                    {message.timestamp && (
-                      <div className="text-right text-xs text-gray-400 mt-2">
-                        {message.timestamp}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {loading && (
-                <div className="flex justify-start">
-                  <div className="bg-purple-100 border border-purple-200 p-4 rounded-2xl shadow-sm text-purple-800 italic">
-                    🤖 Thinking ...
-                  </div>
-                </div>
-              )}
-
-              <div ref={bottomRef}></div>
-            </div>
-
-            {/* CHAT INPUT */}
-            <div className="p-4 border-t bg-white shrink-0">
-              <div className="flex gap-3 min-w-0">
-                <textarea
-                  value={userInput}
-                  onChange={(e) => setUserInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      sendToLLM();
-                    }
-                  }}
-                  className="
+                  <textarea
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        sendToLLM();
+                      }
+                    }}
+                    className="
                     flex-1
                     h-16
                     border
@@ -873,12 +1466,16 @@ export default function Dashboard() {
                     focus:ring-blue-400
                     min-w-0
                   "
-                  placeholder="Type ..."
-                />
+                    placeholder={
+                      currentMode === "verification"
+                        ? "Paste the code to analyze here..."
+                        : "Type your request..."
+                    }
+                  />
 
-                <button
-                  onClick={sendToLLM}
-                  className="
+                  <button
+                    onClick={sendToLLM}
+                    className="
                     px-6
                     bg-blue-500
                     hover:bg-blue-700
@@ -888,17 +1485,21 @@ export default function Dashboard() {
                     font-semibold
                     shrink-0
                   "
-                >
-                  {loading ? "..." : "Send"}
-                </button>
+                  >
+                    {loading
+                      ? "..."
+                      : currentMode === "verification"
+                        ? "Analyze"
+                        : "Send"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* RIGHT PANEL */}
-        <div
-          className="
+          {/* RIGHT PANEL */}
+          <div
+            className="
             w-[22%]
             bg-purple-500
             border-l
@@ -908,21 +1509,43 @@ export default function Dashboard() {
             overflow-hidden
             min-w-0
           "
-        >
-          {/* SCROLLABLE CONTENT */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1">
-            <div className="bg-gray-200 p-4 rounded-xl mb-6">
-              <h2 className="text-black font-bold mb-2">🤖 Modèle LLM</h2>
+          >
+            {/* SCROLLABLE CONTENT */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1">
+              <div className="bg-gray-200 p-4 rounded-xl mb-6">
+                <h2 className="text-black font-bold mb-2">🤖 Modèle LLM</h2>
 
-              <p className="text-sm text-blue-700 break-all">{model}</p>
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="
+                  w-full
+                  p-2
+                  rounded-lg
+                  text-sm
+                  text-black
+                  outline-none
+                  mb-2
+                "
+                >
+                  {models.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
 
-              <p className="text-sm text-gray-600">via OpenRouter</p>
-            </div>
+                <p className="text-xs text-blue-700 break-all">{model}</p>
 
-            <h2 className="text-xl font-bold mb-4 text-white">🧠 Stratégies</h2>
+                <p className="text-sm text-gray-600">via OpenRouter</p>
+              </div>
 
-            <label
-              className="
+              <h2 className="text-xl font-bold mb-4 text-white">
+                🧠 Stratégies
+              </h2>
+
+              <label
+                className="
                 mb-3
                 w-full
                 p-3
@@ -936,19 +1559,19 @@ export default function Dashboard() {
                 transition
                 block
               "
-            >
-              ➕ Upload strategy
-              <input
-                type="file"
-                accept=".txt"
-                onChange={uploadStrategy}
-                className="hidden"
-              />
-            </label>
+              >
+                ➕ Upload strategy
+                <input
+                  type="file"
+                  accept=".txt"
+                  onChange={uploadStrategy}
+                  className="hidden"
+                />
+              </label>
 
-            <button
-              onClick={() => setShowStrategyForm(!showStrategyForm)}
-              className="
+              <button
+                onClick={() => setShowStrategyForm(!showStrategyForm)}
+                className="
                 mb-4
                 w-full
                 p-3
@@ -959,13 +1582,13 @@ export default function Dashboard() {
                 font-semibold
                 transition
               "
-            >
-              ✍️ Write strategy
-            </button>
+              >
+                ✍️ Write strategy
+              </button>
 
-            {showStrategyForm && (
-              <div
-                className="
+              {showStrategyForm && (
+                <div
+                  className="
                   mb-4
                   bg-white
                   p-3
@@ -973,12 +1596,12 @@ export default function Dashboard() {
                   border
                   border-purple-700
                 "
-              >
-                <input
-                  value={newStrategyTitle}
-                  onChange={(e) => setNewStrategyTitle(e.target.value)}
-                  placeholder="Strategy title ..."
-                  className="
+                >
+                  <input
+                    value={newStrategyTitle}
+                    onChange={(e) => setNewStrategyTitle(e.target.value)}
+                    placeholder="Strategy title ..."
+                    className="
                     w-full
                     mb-2
                     p-2
@@ -986,13 +1609,13 @@ export default function Dashboard() {
                     text-black
                     outline-none
                   "
-                />
+                  />
 
-                <textarea
-                  value={newStrategyContent}
-                  onChange={(e) => setNewStrategyContent(e.target.value)}
-                  placeholder={`Describe the strategy.`}
-                  className="
+                  <textarea
+                    value={newStrategyContent}
+                    onChange={(e) => setNewStrategyContent(e.target.value)}
+                    placeholder={`Describe the strategy.`}
+                    className="
                     w-full
                     h-40
                     mb-2
@@ -1002,17 +1625,18 @@ export default function Dashboard() {
                     resize-none
                     outline-none
                   "
-                />
+                  />
 
-                <div className="text-xs text-gray-500 mb-3 leading-relaxed">
-                  🧠 The content will be saved as a prompt engineering strategy.
-                </div>
+                  <div className="text-xs text-gray-500 mb-3 leading-relaxed">
+                    🧠 The content will be saved as a prompt engineering
+                    strategy.
+                  </div>
 
-                <button
-                  onClick={() =>
-                    editingStrategy ? updateStrategy() : createStrategy()
-                  }
-                  className="
+                  <button
+                    onClick={() =>
+                      editingStrategy ? updateStrategy() : createStrategy()
+                    }
+                    className="
                     w-full
                     p-2
                     rounded
@@ -1021,17 +1645,17 @@ export default function Dashboard() {
                     text-white
                     font-semibold
                   "
-                >
-                  {editingStrategy ? "💾 Update" : "💾 Save"}
-                </button>
-              </div>
-            )}
+                  >
+                    {editingStrategy ? "💾 Update" : "💾 Save"}
+                  </button>
+                </div>
+              )}
 
-            <div className="space-y-3">
-              {strategies.map((strategy, index) => (
-                <div
-                  key={strategy.id || index}
-                  className={`
+              <div className="space-y-3">
+                {strategies.map((strategy, index) => (
+                  <div
+                    key={strategy.id || index}
+                    className={`
                     flex
                     items-start
                     gap-2
@@ -1047,36 +1671,36 @@ export default function Dashboard() {
                         : "bg-gray-600 hover:bg-gray-700"
                     }
                   `}
-                >
-                  <input
-                    type="radio"
-                    name="strategy"
-                    className="w-5 h-5 mt-1 shrink-0"
-                    checked={selectedStrategy?.id === strategy.id}
-                    onChange={() => handleStrategySelect(strategy)}
-                  />
+                  >
+                    <input
+                      type="radio"
+                      name="strategy"
+                      className="w-5 h-5 mt-1 shrink-0"
+                      checked={selectedStrategy?.id === strategy.id}
+                      onChange={() => handleStrategySelect(strategy)}
+                    />
 
-                  <button
-                    onClick={() => handleStrategySelect(strategy)}
-                    className="
+                    <button
+                      onClick={() => handleStrategySelect(strategy)}
+                      className="
                       flex-1
                       text-left
                       overflow-hidden
                       min-w-0
                     "
-                  >
-                    <div className="font-bold truncate">
-                      ✨ {strategy.title}
-                    </div>
+                    >
+                      <div className="font-bold truncate">
+                        ✨ {strategy.title}
+                      </div>
 
-                    <div className="text-sm text-gray-200 mt-1 line-clamp-3 break-words">
-                      {strategy.prompt}
-                    </div>
-                  </button>
+                      <div className="text-sm text-gray-200 mt-1 line-clamp-3 break-words">
+                        {strategy.prompt}
+                      </div>
+                    </button>
 
-                  <button
-                    onClick={() => editStrategy(strategy)}
-                    className="
+                    <button
+                      onClick={() => editStrategy(strategy)}
+                      className="
                       w-7
                       h-7
                       rounded-full
@@ -1088,14 +1712,14 @@ export default function Dashboard() {
                       shrink-0
                       text-sm
                     "
-                    title="Update"
-                  >
-                    ✏️
-                  </button>
+                      title="Update"
+                    >
+                      ✏️
+                    </button>
 
-                  <button
-                    onClick={() => deleteStrategy(strategy)}
-                    className="
+                    <button
+                      onClick={() => deleteStrategy(strategy)}
+                      className="
                       w-7
                       h-7
                       rounded-full
@@ -1107,18 +1731,18 @@ export default function Dashboard() {
                       shrink-0
                       text-sm
                     "
-                    title="Delete"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              ))}
+                      title="Delete"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* FIXED TIP */}
-          <div
-            className="
+            {/* FIXED TIP */}
+            <div
+              className="
               shrink-0
               mt-1
               border
@@ -1129,12 +1753,77 @@ export default function Dashboard() {
               text-sm
               bg-purple-900/30
             "
-          >
-            <div className="text-purple-100 font-bold mb-2">💡 Tip</div>
-            Select or create a strategy before sending the prompt to the LLM.
+            >
+              <div className="text-purple-100 font-bold mb-2">💡 Tip</div>
+              Select or create a strategy before sending the prompt to the LLM.
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* CHANGE SCENARIO / STRATEGY DIALOG */}
+      {showChangeDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-[430px]">
+            <h2 className="text-xl font-bold text-gray-900 mb-3">
+              ⚠️ Conversation in progress
+            </h2>
+
+            <p className="text-sm text-gray-600 mb-4">
+              You already started a conversation using:
+            </p>
+
+            <div className="bg-gray-100 rounded-xl p-4 mb-4 text-sm">
+              <div className="mb-2">
+                📂 <strong>Scenario:</strong>{" "}
+                {selectedScenario?.title || "None"}
+              </div>
+
+              <div>
+                🧠 <strong>Strategy:</strong>{" "}
+                {selectedStrategy?.title || "None"}
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-6">
+              Changing the scenario or strategy will save the current chat and
+              start a new conversation.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={cancelChange}
+                className="
+                px-4
+                py-2
+                rounded-lg
+                bg-gray-200
+                hover:bg-gray-300
+                text-gray-800
+                font-semibold
+              "
+              >
+                Continue Current Chat
+              </button>
+
+              <button
+                onClick={confirmChange}
+                className="
+                px-4
+                py-2
+                rounded-lg
+                bg-blue-500
+                hover:bg-blue-600
+                text-white
+                font-semibold
+              "
+              >
+                Save & Create New Chat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

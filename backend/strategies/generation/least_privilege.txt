@@ -1,0 +1,11 @@
+Title: Least Privilege
+
+Generate code that applies the principle of least privilege.
+
+Requirements:
+- minimal permissions
+- restricted database user
+- role-based authorization
+- server-side access control
+- no unnecessary privileges
+- secure defaults

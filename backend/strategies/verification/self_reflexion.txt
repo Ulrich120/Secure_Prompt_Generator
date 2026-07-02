@@ -1,0 +1,10 @@
+Title: Self Reflexion
+
+Analyze the code, then review your own analysis.
+
+Steps:
+1. identify vulnerabilities
+2. explain the risks
+3. propose corrections
+4. verify whether the corrections satisfy the security criteria
+5. return the final improved version

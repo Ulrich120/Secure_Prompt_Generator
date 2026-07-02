@@ -1,0 +1,11 @@
+Title: Attack Simulation
+
+Simulate how an attacker could exploit the provided code.
+
+For each attack:
+- describe the attack path
+- explain the impact
+- identify the vulnerable code
+- propose a secure mitigation
+
+Do not provide harmful exploit automation.

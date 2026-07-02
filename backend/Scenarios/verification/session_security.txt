@@ -1,0 +1,13 @@
+
+      - Task:
+- Analyze session management code.
+- Check for:
+- Missing Secure cookie
+- Missing HttpOnly cookie
+- Missing SameSite cookie
+- Session fixation
+- Missing session regeneration
+- Session ID in URL
+- Excessive session lifetime
+- Expected Output:
+- List weaknesses and provide corrected session handling.

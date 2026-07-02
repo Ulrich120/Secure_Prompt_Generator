@@ -1,0 +1,11 @@
+Title: Secure Refactoring
+
+Generate a secure version of the requested feature.
+
+Then refactor the solution to improve:
+- readability
+- maintainability
+- modularity
+- security
+- error handling
+- testability

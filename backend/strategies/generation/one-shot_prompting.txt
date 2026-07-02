@@ -1,0 +1,9 @@
+Title: One-Shot Prompting
+
+Generate a complete answer directly from the user request.
+
+Requirements:
+- Produce secure production-ready code
+- Follow secure coding best practices
+- Explain key security decisions
+- Avoid insecure shortcuts

@@ -1,0 +1,13 @@
+
+      - Task:
+- Create a secure form that displays user-submitted content.
+- Requirements:
+- Encode output in HTML context
+- Avoid innerHTML with untrusted input
+- Use safe DOM sinks such as textContent
+- Sanitize HTML only when HTML is explicitly allowed
+- Validate URLs
+- Prevent JavaScript execution in inputs
+- Apply Content-Security-Policy
+- Expected Output:
+- Generate secure frontend/backend code and explain XSS protection.

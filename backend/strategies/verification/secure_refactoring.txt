@@ -1,0 +1,9 @@
+Title: Secure Refactoring
+
+Analyze the provided code and rewrite it securely.
+
+Output:
+1. vulnerabilities found
+2. explanation
+3. secure corrected version
+4. security improvements added

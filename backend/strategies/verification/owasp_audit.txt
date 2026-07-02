@@ -1,0 +1,17 @@
+Title: Owasp Audit
+
+Perform an OWASP-style security audit.
+
+Check for:
+- Broken Access Control
+- Cryptographic Failures
+- Injection
+- Insecure Design
+- Security Misconfiguration
+- Vulnerable Components
+- Authentication Failures
+- Software and Data Integrity Failures
+- Logging and Monitoring Failures
+- SSRF
+
+Return a structured audit report.

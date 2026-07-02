@@ -1,0 +1,13 @@
+- Task:
+- Analyze JWT authentication code.
+- Check for:
+- Weak secret
+- Hardcoded secret
+- Missing expiration
+- Missing refresh token protection
+- Insecure token storage
+- Missing signature verification
+- Missing role validation
+- Excessive token lifetime
+- Expected Output:
+- Provide vulnerabilities, risk level, and secure refactoring.
