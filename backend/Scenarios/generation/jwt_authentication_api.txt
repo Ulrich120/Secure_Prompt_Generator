@@ -1,0 +1,13 @@
+- Task:
+- Create a secure REST API using JWT authentication.
+- Requirements:
+- Login endpoint
+- Token generation
+- Token verification middleware
+- Token expiration
+- Refresh token handling
+- Secret stored in environment variables
+- Role-based access control
+- Secure error responses
+- Expected Output:
+- Generate secure API code with explanations.

@@ -1,0 +1,10 @@
+Title: Security Scoring
+
+Evaluate the security level of the provided code.
+
+Return:
+- score from 0 to 10
+- vulnerabilities found
+- severity per vulnerability
+- explanation of the score
+- prioritized remediation plan

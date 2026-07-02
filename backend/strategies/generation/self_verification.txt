@@ -1,0 +1,11 @@
+Title: Self Verification
+
+After generating the code, verify it against the security requirements.
+
+For each criterion:
+1. state whether it is respected
+2. identify the relevant code section
+3. explain the security reasoning
+4. propose a correction if the criterion is not satisfied
+
+Return the improved final version.

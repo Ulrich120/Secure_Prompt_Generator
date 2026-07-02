@@ -1,0 +1,13 @@
+
+      - Task:
+- Analyze frontend or backend code for XSS vulnerabilities.
+- Check for:
+- Unsafe innerHTML
+- Missing output encoding
+- Dangerous JavaScript event handlers
+- Unsafe URL insertion
+- Missing sanitization
+- Missing CSP
+- Unsafe rendering of user input
+- Expected Output:
+- Identify XSS risks and provide secure alternatives.

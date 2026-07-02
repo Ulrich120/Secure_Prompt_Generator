@@ -1,0 +1,14 @@
+Title: Defense in Depth
+
+Generate code using multiple layers of defense.
+
+Include:
+- validation
+- authentication
+- authorization
+- rate limiting
+- secure storage
+- logging
+- monitoring
+- secure headers
+- error handling

@@ -1,0 +1,13 @@
+
+      - Task:
+- Create a sensitive form protected against CSRF.
+- Requirements:
+- Generate CSRF token
+- Store token securely
+- Include token in sensitive requests
+- Validate token server-side
+- Use SameSite cookies
+- Use POST for sensitive actions
+- Reject missing or invalid tokens
+- Expected Output:
+- Generate secure code and explain the CSRF defenses.

@@ -1,0 +1,13 @@
+Title: Risk Prioritization
+
+Analyze vulnerabilities and prioritize them.
+
+For each issue:
+- severity
+- likelihood
+- impact
+- exploitability
+- recommended fix
+- priority order
+
+Return a clear remediation roadmap.

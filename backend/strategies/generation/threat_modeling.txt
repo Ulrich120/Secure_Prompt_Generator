@@ -1,0 +1,12 @@
+Title: Threat Modeling
+
+Before generating the code, identify possible threats.
+
+Use this structure:
+1. assets to protect
+2. possible attackers
+3. attack vectors
+4. security controls
+5. secure implementation
+
+Then generate the secure code.

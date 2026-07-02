@@ -1,0 +1,14 @@
+- Task:
+- Analyze file upload code.
+- Check for:
+- Missing extension allow-list
+- Trusting Content-Type only
+- Missing file signature validation
+- No file size limit
+- Path traversal
+- Unsafe filename
+- Public storage location
+- Missing authentication
+- Missing malware scanning
+- Expected Output:
+- List vulnerabilities and propose secure code.

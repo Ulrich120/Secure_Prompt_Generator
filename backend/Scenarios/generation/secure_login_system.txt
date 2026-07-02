@@ -1,0 +1,14 @@
+- Task:
+- Create a secure login system.
+- Requirements:
+- User registration
+- User login
+- Password hashing with bcrypt or Argon2
+- JWT authentication
+- Generic error messages
+- Login rate limiting
+- Account lockout after repeated failures
+- Input validation
+- Secure error handling
+- Expected Output:
+- Generate secure production-ready code and explain the security choices.

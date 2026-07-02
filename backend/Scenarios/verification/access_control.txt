@@ -1,0 +1,12 @@
+
+      - Task:
+- Analyze authorization and role-based access control.
+- Check for:
+- Missing server-side authorization
+- Client-side role trust
+- Broken access control
+- Missing least privilege
+- IDOR vulnerabilities
+- Missing audit logs
+- Expected Output:
+- Identify authorization flaws and propose secure corrections.

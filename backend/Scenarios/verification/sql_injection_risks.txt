@@ -1,0 +1,11 @@
+- Task:
+- Analyze database query code for SQL injection.
+- Check for:
+- String concatenation in SQL queries
+- Missing prepared statements
+- Missing parameterized queries
+- Unsafe dynamic table or column names
+- Excessive database privileges
+- Poor error handling
+- Expected Output:
+- Explain each risk and rewrite the code securely.

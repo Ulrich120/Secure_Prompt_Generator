@@ -4,6 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import UploadFile, File, Form
 import shutil
 
+# CONVERSATIONS DATABASE
+from database import SessionLocal, Conversation
+import json
+
 from pydantic import BaseModel
 
 from scenario_loader import load_scenarios
@@ -39,6 +43,7 @@ def home():
 # GENERATE ENDPOINT
 @app.post("/generate")
 async def generate(data: dict):
+    max_tokens = data.get("max_tokens", 2000)
 
     try:
         prompt = data.get("prompt", "")
@@ -61,7 +66,8 @@ async def generate(data: dict):
                         "role": "user",
                         "content": prompt
                     }
-                ]
+                ],
+                "max_tokens": max_tokens,
             },
             timeout=120,
         )
@@ -423,3 +429,181 @@ async def upload_strategy(
         return {
             "error": str(e)
         }
+    
+# =========================
+# CONVERSATIONS
+# =========================
+
+class ConversationCreate(BaseModel):
+    mode: str
+    title: str
+    scenario_title: str
+    strategy_title: str
+    model: str
+    messages: list
+
+
+class ConversationUpdate(BaseModel):
+    title: str
+    scenario_title: str
+    strategy_title: str
+    model: str
+    messages: list
+
+
+@app.post("/save-conversation")
+def save_conversation(data: ConversationCreate):
+    try:
+        db = SessionLocal()
+
+        conversation = Conversation(
+            mode=data.mode,
+            title=data.title,
+            scenario_title=data.scenario_title,
+            strategy_title=data.strategy_title,
+            model=data.model,
+            messages=json.dumps(data.messages, ensure_ascii=False),
+        )
+
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+
+        return {
+            "message": "Conversation saved",
+            "id": conversation.id,
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+    finally:
+        db.close()
+
+
+@app.get("/conversations")
+def get_conversations(mode: str = None):
+    try:
+        db = SessionLocal()
+
+        query = db.query(Conversation)
+
+        if mode:
+            query = query.filter(Conversation.mode == mode)
+
+        conversations = (
+            query
+            .order_by(Conversation.created_at.desc())
+            .all()
+        )
+
+        return [
+            {
+                "id": conv.id,
+                "mode": conv.mode,
+                "title": conv.title,
+                "scenario_title": conv.scenario_title,
+                "strategy_title": conv.strategy_title,
+                "model": conv.model,
+                "created_at": conv.created_at,
+            }
+            for conv in conversations
+        ]
+
+    except Exception as e:
+        return {"error": str(e)}
+
+    finally:
+        db.close()
+
+
+@app.get("/conversations/{conversation_id}")
+def get_conversation(conversation_id: str):
+    try:
+        db = SessionLocal()
+
+        conv = (
+            db.query(Conversation)
+            .filter(Conversation.id == conversation_id)
+            .first()
+        )
+
+        if not conv:
+            return {"error": "Conversation not found"}
+
+        return {
+            "id": conv.id,
+            "mode": conv.mode,
+            "title": conv.title,
+            "scenario_title": conv.scenario_title,
+            "strategy_title": conv.strategy_title,
+            "model": conv.model,
+            "messages": json.loads(conv.messages),
+            "created_at": conv.created_at,
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+    finally:
+        db.close()
+
+
+@app.put("/conversations/{conversation_id}")
+def update_conversation(conversation_id: str, data: ConversationUpdate):
+    try:
+        db = SessionLocal()
+
+        conv = (
+            db.query(Conversation)
+            .filter(Conversation.id == conversation_id)
+            .first()
+        )
+
+        if not conv:
+            return {"error": "Conversation not found"}
+
+        conv.title = data.title
+        conv.scenario_title = data.scenario_title
+        conv.strategy_title = data.strategy_title
+        conv.model = data.model
+        conv.messages = json.dumps(data.messages, ensure_ascii=False)
+
+        db.commit()
+
+        return {
+            "message": "Conversation updated",
+            "id": conv.id,
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+    finally:
+        db.close()
+
+
+@app.delete("/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str):
+    try:
+        db = SessionLocal()
+
+        conv = (
+            db.query(Conversation)
+            .filter(Conversation.id == conversation_id)
+            .first()
+        )
+
+        if not conv:
+            return {"error": "Conversation not found"}
+
+        db.delete(conv)
+        db.commit()
+
+        return {"message": "Conversation deleted"}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+    finally:
+        db.close()

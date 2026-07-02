@@ -1,0 +1,15 @@
+Title: Secure Code Review
+
+Perform a secure code review.
+
+Check:
+- input validation
+- authentication
+- authorization
+- session management
+- cryptography
+- error handling
+- logging
+- dependency risks
+
+Return findings with severity and corrected code.

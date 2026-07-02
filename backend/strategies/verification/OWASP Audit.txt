@@ -1,6 +1,0 @@
-Validate the analyzed code against OWASP Top 10.
-
-Provide:
-- vulnerabilities found
-- severity score
-- remediation recommendations

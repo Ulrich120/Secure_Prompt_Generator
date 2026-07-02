@@ -1,0 +1,12 @@
+
+      - Task:
+- Create a secure database query using user input.
+- Requirements:
+- Use prepared statements
+- Use parameterized queries
+- Never concatenate user input into SQL
+- Validate non-parameterizable values with allow-lists
+- Use least privilege database account
+- Handle errors securely
+- Expected Output:
+- Generate secure code and explain how SQL injection is prevented.

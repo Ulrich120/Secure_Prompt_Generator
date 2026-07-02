@@ -1,0 +1,12 @@
+Title: Secure Defaults
+
+Generate the solution using secure defaults.
+
+Requirements:
+- deny by default
+- use least privilege
+- avoid hardcoded secrets
+- enable secure cookie attributes
+- validate all inputs
+- fail securely
+- do not expose sensitive errors

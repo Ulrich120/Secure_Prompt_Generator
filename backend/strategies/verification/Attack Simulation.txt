@@ -1,7 +1,0 @@
-Simulate real-world cyberattacks against the provided code.
-
-Identify:
-- exploit vectors
-- privilege escalation
-- data leaks
-- remote code execution risks

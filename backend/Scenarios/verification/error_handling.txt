@@ -1,0 +1,12 @@
+
+      - Task:
+- Analyze error handling for information leakage.
+- Check for:
+- Stack traces exposed to users
+- Different errors for existing and non-existing users
+- Sensitive data in logs
+- Verbose database errors
+- Secrets exposed in responses
+- Missing secure logging
+- Expected Output:
+- Explain leaks and rewrite error handling securely.

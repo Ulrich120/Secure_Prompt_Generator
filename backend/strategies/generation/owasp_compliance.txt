@@ -1,0 +1,14 @@
+Title: OWASP Compliance
+
+Generate code that follows OWASP secure coding recommendations.
+
+Check:
+- Authentication
+- Authorization
+- Input validation
+- Injection prevention
+- XSS prevention
+- CSRF protection
+- Session management
+- Secure headers
+- Logging and monitoring

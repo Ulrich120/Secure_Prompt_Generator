@@ -1,0 +1,12 @@
+
+      - Task:
+- Analyze sensitive routes for CSRF vulnerabilities.
+- Check for:
+- Missing CSRF token
+- Missing server-side validation
+- Sensitive action using GET
+- Missing SameSite cookies
+- Weak token generation
+- Missing token rotation
+- Expected Output:
+- Explain vulnerabilities and propose a secure CSRF defense.

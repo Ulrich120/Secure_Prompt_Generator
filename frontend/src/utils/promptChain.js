@@ -17,6 +17,7 @@ async function fetchLLM(prompt, selectedModel = DEFAULT_MODEL) {
       body: JSON.stringify({
         prompt,
         model: selectedModel,
+        max_tokens: 2000,
       }),
     });
 
