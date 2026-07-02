@@ -1,7 +1,6 @@
 import { executeStrategies } from "./strategyEngine";
 
-const API_URL =
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const DEFAULT_MODEL = "deepseek/deepseek-chat-v3-0324";
 
@@ -30,11 +29,16 @@ async function fetchLLM(prompt, selectedModel = DEFAULT_MODEL) {
 
     console.log("BACKEND RESPONSE:", data);
 
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}: ${JSON.stringify(data)}`);
+    }
+
     if (data.error) {
       throw new Error(JSON.stringify(data.error));
     }
 
     return data.response;
+    
   } catch (error) {
     console.error("FETCH LLM ERROR:", error);
 
