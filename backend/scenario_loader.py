@@ -1,6 +1,6 @@
 import os
 
-BASE_DIR = "scenarios"
+BASE_DIR = "Scenarios"
 
 
 def load_scenarios(mode):
