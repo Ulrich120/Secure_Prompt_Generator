@@ -39,6 +39,22 @@ app.add_middleware(
 def home():
     return {"message": "Secure Prompt Generator API is running"}
 
+@app.get("/debug-files")
+def debug_files():
+    try:
+        result = {}
+
+        for root, dirs, files in os.walk("."):
+            result[root] = {
+                "dirs": dirs,
+                "files": files,
+            }
+
+        return result
+
+    except Exception as e:
+        return {"error": str(e)}
+
 
 # GENERATE ENDPOINT
 @app.post("/generate")
