@@ -1,5 +1,8 @@
 import { executeStrategies } from "./strategyEngine";
 
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+
 const DEFAULT_MODEL = "deepseek/deepseek-chat-v3-0324";
 
 // FETCH LLM
@@ -7,7 +10,7 @@ async function fetchLLM(prompt, selectedModel = DEFAULT_MODEL) {
   try {
     console.log("MODEL SENT TO BACKEND:", selectedModel);
 
-    const response = await fetch("http://127.0.0.1:8000/generate", {
+    const response = await fetch(`${API_URL}/generate`, {
       method: "POST",
 
       headers: {

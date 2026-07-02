@@ -10,6 +10,7 @@ import { analyzeSecurityFeatures } from "../utils/securityAnalyzer";
 export default function Dashboard() {
   const { mode } = useParams();
   const currentMode = mode || "generation";
+  const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
   /* LLM MODELS */
   const models = [
@@ -72,6 +73,7 @@ export default function Dashboard() {
 
   const storageKey = `secure_prompt_chat_${mode}`;
 
+
   const getTime = () =>
     new Date().toLocaleTimeString([], {
       hour: "2-digit",
@@ -80,7 +82,7 @@ export default function Dashboard() {
 
   const refreshStrategies = async (modeToLoad = currentMode) => {
     const response = await fetch(
-      `http://127.0.0.1:8000/strategies/${modeToLoad}`,
+      `${API_URL}/strategies/${modeToLoad}`,
     );
 
     const data = await response.json();
@@ -89,7 +91,7 @@ export default function Dashboard() {
 
   const createStrategy = async () => {
     try {
-      await fetch("http://127.0.0.1:8000/create-strategy", {
+      await fetch(`${API_URL}/create-strategy`, {
         method: "POST",
 
         headers: {
@@ -125,7 +127,7 @@ export default function Dashboard() {
 
   const updateStrategy = async () => {
     try {
-      await fetch("http://127.0.0.1:8000/update-strategy", {
+      await fetch(`${API_URL}/update-strategy`, {
         method: "PUT",
 
         headers: {
@@ -160,7 +162,7 @@ export default function Dashboard() {
     }
 
     try {
-      await fetch("http://127.0.0.1:8000/delete-strategy", {
+      await fetch(`${API_URL}/delete-strategy`, {
         method: "DELETE",
 
         headers: {
@@ -191,7 +193,7 @@ export default function Dashboard() {
 
       formData.append("mode", currentMode);
 
-      await fetch("http://127.0.0.1:8000/upload-strategy", {
+      await fetch(`${API_URL}/upload-strategy`, {
         method: "POST",
         body: formData,
       });
@@ -204,7 +206,7 @@ export default function Dashboard() {
 
   const refreshScenarios = async (modeToLoad = currentMode) => {
     const response = await fetch(
-      `http://127.0.0.1:8000/scenarios/${modeToLoad}`,
+      `${API_URL}/scenarios/${modeToLoad}`,
     );
 
     const data = await response.json();
@@ -435,7 +437,7 @@ export default function Dashboard() {
     formData.append("file", file);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/upload-scenario", {
+      const response = await fetch(`${API_URL}/upload-scenario`, {
         method: "POST",
         body: formData,
       });
@@ -466,7 +468,7 @@ export default function Dashboard() {
         .map((line) => `- ${line.replace(/^[-•]\s*/, "")}`)
         .join("\n")}`;
 
-    const response = await fetch("http://127.0.0.1:8000/create-scenario", {
+    const response = await fetch(`${API_URL}/create-scenario`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -506,7 +508,7 @@ export default function Dashboard() {
         .map((line) => `- ${line.replace(/^[-•]\s*/, "")}`)
         .join("\n");
 
-      await fetch("http://127.0.0.1:8000/update-scenario", {
+      await fetch(`${API_URL}/update-scenario`, {
         method: "PUT",
 
         headers: {
@@ -538,7 +540,7 @@ export default function Dashboard() {
     if (!confirmDelete) return;
 
     try {
-      await fetch("http://127.0.0.1:8000/delete-scenario", {
+      await fetch(`${API_URL}/delete-scenario`, {
         method: "DELETE",
 
         headers: {
@@ -564,7 +566,7 @@ export default function Dashboard() {
   const loadConversations = async (modeToLoad = currentMode) => {
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/conversations?mode=${modeToLoad}`,
+        `${API_URL}/conversations?mode=${modeToLoad}`,
       );
 
       const data = await response.json();
@@ -603,7 +605,7 @@ export default function Dashboard() {
 
     if (activeConversationId) {
       await fetch(
-        `http://127.0.0.1:8000/conversations/${activeConversationId}`,
+        `${API_URL}/conversations/${activeConversationId}`,
         {
           method: "PUT",
           headers: {
@@ -613,7 +615,7 @@ export default function Dashboard() {
         },
       );
     } else {
-      const response = await fetch("http://127.0.0.1:8000/save-conversation", {
+      const response = await fetch(`${API_URL}/save-conversation`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -636,7 +638,7 @@ export default function Dashboard() {
     setShowChangeDialog(false);
     setPendingChange(null);
 
-    const response = await fetch(`http://127.0.0.1:8000/conversations/${id}`);
+    const response = await fetch(`${API_URL}/conversations/${id}`);
     const data = await response.json();
 
     const restoredMessages = data.messages || [];
@@ -691,7 +693,7 @@ export default function Dashboard() {
   const deleteSavedConversation = async (id) => {
     if (!window.confirm("Supprimer cette conversation ?")) return;
 
-    await fetch(`http://127.0.0.1:8000/conversations/${id}`, {
+    await fetch(`${API_URL}/conversations/${id}`, {
       method: "DELETE",
     });
 
