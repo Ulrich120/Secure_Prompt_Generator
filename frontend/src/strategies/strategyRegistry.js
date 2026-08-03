@@ -19,6 +19,9 @@ from "./secureRefactoring";
 import { vulnerabilityAnalysis }
 from "./vulnerabilityAnalysis";
 
+import microsoftMethod 
+from "./executors/microsoftMethod";
+
 export const strategyRegistry = {
 
   "One-Shot Prompting": oneShot,
@@ -33,5 +36,7 @@ export const strategyRegistry = {
 
   "Secure Refactoring": secureRefactoring,
 
-  "Vulnerability Analysis": vulnerabilityAnalysis
+  "Vulnerability Analysis": vulnerabilityAnalysis,
+
+  "Microsoft Method": microsoftMethod,
 };
