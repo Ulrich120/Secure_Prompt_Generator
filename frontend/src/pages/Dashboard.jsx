@@ -73,7 +73,6 @@ export default function Dashboard() {
 
   const storageKey = `secure_prompt_chat_${mode}`;
 
-
   const getTime = () =>
     new Date().toLocaleTimeString([], {
       hour: "2-digit",
@@ -81,9 +80,7 @@ export default function Dashboard() {
     });
 
   const refreshStrategies = async (modeToLoad = currentMode) => {
-    const response = await fetch(
-      `${API_URL}/strategies/${modeToLoad}`,
-    );
+    const response = await fetch(`${API_URL}/strategies/${modeToLoad}`);
 
     const data = await response.json();
     setStrategies(data);
@@ -205,9 +202,7 @@ export default function Dashboard() {
   };
 
   const refreshScenarios = async (modeToLoad = currentMode) => {
-    const response = await fetch(
-      `${API_URL}/scenarios/${modeToLoad}`,
-    );
+    const response = await fetch(`${API_URL}/scenarios/${modeToLoad}`);
 
     const data = await response.json();
     setScenarios(data);
@@ -224,10 +219,16 @@ export default function Dashboard() {
   };
 
   const updateScenarioStrategyBubble = (scenario, strategy) => {
-    const content = formatScenarioStrategyBubble(scenario, strategy);
-
     setMessages((prev) => {
       const withoutConfig = prev.filter((msg) => msg.type !== "config");
+
+      // Aucun prompt ne doit être affiché tant que
+      // le scénario ET la stratégie ne sont pas sélectionnés.
+      if (!scenario || !strategy) {
+        return withoutConfig;
+      }
+
+      const content = formatScenarioStrategyBubble(scenario, strategy);
 
       return [
         {
@@ -242,27 +243,40 @@ export default function Dashboard() {
   };
 
   const requestChatChange = (type, value) => {
-    const hasLLMResponse = messages.some((msg) => msg.role === "assistant");
+    const hasLLMResponse = messages.some(
+      (msg) => msg.role === "assistant" && msg.type === "response",
+    );
 
     const hasRealConversation = chatLocked && hasLLMResponse;
 
+    // Avant le démarrage réel du chat :
+    // l'utilisateur peut librement lire et modifier ses choix.
     if (!hasRealConversation) {
       if (type === "scenario") {
         setSelectedScenario(value);
+
         updateScenarioStrategyBubble(value, selectedStrategy);
       }
 
       if (type === "strategy") {
         setSelectedStrategy(value);
+
         updateScenarioStrategyBubble(selectedScenario, value);
       }
 
       setConversationStarted(false);
       setActiveConversationId(null);
+
       return;
     }
 
-    setPendingChange({ type, value });
+    // Après une réponse du LLM :
+    // protéger la conversation en cours.
+    setPendingChange({
+      type,
+      value,
+    });
+
     setShowChangeDialog(true);
   };
 
@@ -604,16 +618,13 @@ export default function Dashboard() {
     };
 
     if (activeConversationId) {
-      await fetch(
-        `${API_URL}/conversations/${activeConversationId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
+      await fetch(`${API_URL}/conversations/${activeConversationId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify(payload),
+      });
     } else {
       const response = await fetch(`${API_URL}/save-conversation`, {
         method: "POST",
@@ -1246,7 +1257,13 @@ export default function Dashboard() {
               >
                 {messages.length === 0 && (
                   <div className="text-center text-gray-400 italic mt-20">
-                    🚀 Select a scenario and a strategy to get started.
+                    {!selectedScenario && !selectedStrategy
+                      ? "Select a scenario and a strategy to prepare the prompt."
+                      : !selectedScenario
+                        ? "Now select a scenario."
+                        : !selectedStrategy
+                          ? "Now select a strategy."
+                          : "The prompt is ready. You can send it to the LLM."}
                   </div>
                 )}
 

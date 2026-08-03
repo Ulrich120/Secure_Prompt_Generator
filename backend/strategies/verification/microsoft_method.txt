@@ -1,0 +1,21 @@
+Title: Microsoft Method
+
+Perform a multi-step security review based on the following method:
+
+1. The program behavior is already described in the scenario and does not need
+   to be repeated.
+2. Identify what could go wrong if the solution is implemented.
+3. Determine what must be done to prevent each identified problem.
+4. Verify whether every preventive control has actually been implemented in the
+   corrected solution.
+
+The final answer must distinguish:
+- identified risks;
+- preventive controls;
+- implementation evidence;
+- missing controls;
+- required corrections;
+- final security score.
+
+Do not invent implementation evidence.
+Base conclusions only on observable code or supplied content.
