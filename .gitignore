@@ -18,3 +18,12 @@ dist/
 .DS_Store
 Thumbs.db
 conversations.db
+
+# Temporary files
+*.tmp
+
+# Sensitive files
+.env.local
+
+# Ignore any other files that may contain sensitive information 
+docs/demo/*.mp4
