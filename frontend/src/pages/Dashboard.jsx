@@ -398,6 +398,9 @@ export default function Dashboard() {
         generatedPrompt: promptToSend,
         selectedStrategy,
         selectedModel: model,
+        mode: currentMode,
+        scenario: selectedScenario,
+        userInput,
       });
 
       const assistantMessage = {

@@ -38,5 +38,8 @@ export const strategyRegistry = {
 
   "Vulnerability Analysis": vulnerabilityAnalysis,
 
-  "Microsoft Method": microsoftMethod,
+  "Microsoft Method": {
+    type: "multi-step",
+    executor: microsoftMethod,
+  },
 };

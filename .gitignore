@@ -27,3 +27,5 @@ conversations.db
 
 # Ignore any other files that may contain sensitive information 
 docs/demo/*.mp4
+# Local backup files
+*.bak
