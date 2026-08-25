@@ -1,4 +1,4 @@
-import { executeStrategies } from "./strategyEngine";
+﻿import { executeStrategies } from "./strategyEngine";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -30,7 +30,9 @@ async function fetchLLM(prompt, selectedModel = DEFAULT_MODEL) {
     console.log("BACKEND RESPONSE:", data);
 
     if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}: ${JSON.stringify(data)}`);
+      throw new Error(
+        `HTTP error ${response.status}: ${JSON.stringify(data)}`
+      );
     }
 
     if (data.error) {
@@ -38,7 +40,6 @@ async function fetchLLM(prompt, selectedModel = DEFAULT_MODEL) {
     }
 
     return data.response;
-    
   } catch (error) {
     console.error("FETCH LLM ERROR:", error);
 
@@ -51,12 +52,21 @@ export async function runPromptChain({
   generatedPrompt,
   selectedStrategy,
   selectedModel = DEFAULT_MODEL,
+  mode,
+  scenario,
+  userInput,
 }) {
   try {
     return await executeStrategies({
       basePrompt: generatedPrompt,
 
       strategy: selectedStrategy,
+
+      mode,
+
+      scenario,
+
+      userInput,
 
       fetchLLM: (prompt) => fetchLLM(prompt, selectedModel),
     });
