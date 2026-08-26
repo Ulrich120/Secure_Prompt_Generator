@@ -1,21 +1,23 @@
-Title: Microsoft Method
+﻿Title: Microsoft Method
 
-Perform a multi-step security review based on the following method:
+Perform the Microsoft Method as a real four-step prompt sequence.
 
-1. The program behavior is already described in the scenario and does not need
-   to be repeated.
-2. Identify what could go wrong if the solution is implemented.
-3. Determine what must be done to prevent each identified problem.
-4. Verify whether every preventive control has actually been implemented in the
-   corrected solution.
+Step 1 - What does the program do?
+Explain the behavior, inputs, outputs, important operations, and
+security-sensitive operations of the program.
 
-The final answer must distinguish:
-- identified risks;
-- preventive controls;
-- implementation evidence;
-- missing controls;
-- required corrections;
-- final security score.
+Step 2 - What could go wrong?
+Identify the security problems, vulnerabilities, threats, and potential
+impacts that apply to this specific program.
 
+Step 3 - What must be done to prevent each problem?
+For every problem identified in Step 2, define the required mitigation
+and apply those mitigations in a corrected secure implementation.
+
+Step 4 - Was it actually done?
+Review the corrected implementation and verify whether every required
+mitigation has actually been implemented.
+
+Each step must use the result of the previous step.
+Do not skip steps.
 Do not invent implementation evidence.
-Base conclusions only on observable code or supplied content.

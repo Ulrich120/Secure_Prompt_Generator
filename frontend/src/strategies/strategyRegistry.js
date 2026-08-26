@@ -1,4 +1,4 @@
-import { oneShot }
+﻿import { oneShot }
 from "./oneShot";
 
 import { rolePrompting } 
@@ -19,9 +19,6 @@ from "./secureRefactoring";
 import { vulnerabilityAnalysis }
 from "./vulnerabilityAnalysis";
 
-import microsoftMethod 
-from "./executors/microsoftMethod";
-
 export const strategyRegistry = {
 
   "One-Shot Prompting": oneShot,
@@ -39,7 +36,6 @@ export const strategyRegistry = {
   "Vulnerability Analysis": vulnerabilityAnalysis,
 
   "Microsoft Method": {
-    type: "multi-step",
-    executor: microsoftMethod,
+    type: "interactive-multi-step",
   },
 };
