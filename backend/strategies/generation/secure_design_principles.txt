@@ -1,0 +1,57 @@
+﻿Title: Secure Design Principles
+
+Generate the requested solution by explicitly applying the eight security design principles of Saltzer and Schroeder together with Defense in Depth.
+
+Apply and explain the following principles:
+
+1. Economy of Mechanism
+Keep the design and security mechanisms as simple and small as possible. Avoid unnecessary complexity that could introduce security defects.
+
+2. Fail-Safe Defaults
+Base access decisions on explicit permission. Deny access by default unless it has been specifically authorized.
+
+3. Complete Mediation
+Validate every access to every protected resource. Do not rely only on an earlier authorization decision.
+
+4. Open Design
+Do not depend on secrecy of the design or implementation for security. Security should depend on protected secrets such as cryptographic keys, not hidden algorithms or architecture.
+
+5. Separation of Privilege
+Require multiple independent conditions or privileges for sensitive operations when appropriate.
+
+6. Least Privilege
+Give each user, process, service, and component only the minimum privileges required to perform its task.
+
+7. Least Common Mechanism
+Minimize mechanisms and resources shared between different users, processes, or security domains.
+
+8. Psychological Acceptability
+Design security controls so that they are understandable and practical to use correctly. Secure behavior should not unnecessarily burden the user.
+
+Defense in Depth:
+Do not rely on a single security control. Use multiple complementary layers of protection so that failure of one control does not immediately compromise the system.
+
+For the requested scenario:
+
+- identify which of these principles are relevant;
+- apply them directly in the implementation;
+- explain where each relevant principle is applied;
+- identify the Defense in Depth layers used;
+- avoid adding security mechanisms that are unrelated to the scenario;
+- preserve the required functionality;
+- produce secure, maintainable code.
+
+In the final response, include a section named:
+
+Security Design Principles Applied
+
+Use a concise table with:
+
+| Principle | How it was applied |
+|-----------|--------------------|
+
+Then include:
+
+Defense in Depth Layers
+
+and list the independent protection layers used in the implementation.

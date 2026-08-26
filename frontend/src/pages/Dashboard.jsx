@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 
 import { buildPrompt } from "../utils/promptBuilder";
@@ -6,7 +6,7 @@ import { runPromptChain } from "../utils/promptChain";
 import MarkdownRenderer from "../components/MarkdownRenderer";
 import { exportAuditReport } from "../utils/pdfExporter";
 import { analyzeSecurityFeatures } from "../utils/securityAnalyzer";
-import { microsoftSteps } from "../strategies/microsoft/microsoftSteps";
+import { getInteractiveStrategyConfig } from "../strategies/interactiveStrategyConfig";
 
 export default function Dashboard() {
   const { mode } = useParams();
@@ -47,11 +47,11 @@ export default function Dashboard() {
   const [selectedScenario, setSelectedScenario] = useState(null);
   const [selectedStrategy, setSelectedStrategy] = useState(null);
 
-  // Microsoft Method interactive workflow
-  const [microsoftExpanded, setMicrosoftExpanded] = useState(false);
-  const [microsoftCurrentStep, setMicrosoftCurrentStep] = useState(1);
-  const [microsoftCompletedSteps, setMicrosoftCompletedSteps] = useState([]);
-  const [microsoftPreparedStep, setMicrosoftPreparedStep] = useState(null);
+  // Generic interactive multi-step strategy workflow
+  const [interactiveExpanded, setInteractiveExpanded] = useState(false);
+  const [interactiveCurrentStep, setInteractiveCurrentStep] = useState(1);
+  const [interactiveCompletedSteps, setInteractiveCompletedSteps] = useState([]);
+  const [interactivePreparedStep, setInteractivePreparedStep] = useState(null);
 
   const [messages, setMessages] = useState([]);
   const [conversationStarted, setConversationStarted] = useState(false);
@@ -79,36 +79,50 @@ export default function Dashboard() {
 
   const storageKey = `secure_prompt_chat_${currentMode}`;
 
+  const getSelectedInteractiveConfig = () =>
+    getInteractiveStrategyConfig(selectedStrategy?.title);
+
   const getTime = () =>
     new Date().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
 
-  const resetMicrosoftWorkflow = (expanded = false) => {
-    setMicrosoftExpanded(expanded);
-    setMicrosoftCurrentStep(1);
-    setMicrosoftCompletedSteps([]);
-    setMicrosoftPreparedStep(null);
+  const resetInteractiveWorkflow = (expanded = false) => {
+    setInteractiveExpanded(expanded);
+    setInteractiveCurrentStep(1);
+    setInteractiveCompletedSteps([]);
+    setInteractivePreparedStep(null);
   };
 
-  const restoreMicrosoftWorkflow = (restoredMessages, strategy) => {
-    if (strategy?.title !== "Microsoft Method") {
-      resetMicrosoftWorkflow(false);
+  const restoreInteractiveWorkflow = (restoredMessages, strategy) => {
+    const config = getInteractiveStrategyConfig(strategy?.title);
+
+    if (!config) {
+      resetInteractiveWorkflow(false);
       return;
     }
 
     const completed = new Set();
+    const escapedTitle = config.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const stepPattern = new RegExp(
+      `${escapedTitle}\\s*[—-]\\s*Step\\s*(\\d+)`,
+      "i",
+    );
 
     restoredMessages
       .filter((message) => message.role === "user")
       .forEach((message) => {
-        const match = String(message.content || "").match(
-          /Microsoft Method\s*[—-]\s*Step\s*([1-4])/i,
-        );
+        const match = String(message.content || "").match(stepPattern);
 
-        if (match) {
-          completed.add(Number(match[1]));
+        if (!match) {
+          return;
+        }
+
+        const stepNumber = Number(match[1]);
+
+        if (stepNumber >= 1 && stepNumber <= config.steps.length) {
+          completed.add(stepNumber);
         }
       });
 
@@ -116,12 +130,12 @@ export default function Dashboard() {
     const highestCompleted =
       completedSteps.length > 0 ? Math.max(...completedSteps) : 0;
 
-    setMicrosoftExpanded(true);
-    setMicrosoftCompletedSteps(completedSteps);
-    setMicrosoftPreparedStep(null);
-    setMicrosoftCurrentStep(
-      highestCompleted >= microsoftSteps.length
-        ? microsoftSteps.length
+    setInteractiveExpanded(true);
+    setInteractiveCompletedSteps(completedSteps);
+    setInteractivePreparedStep(null);
+    setInteractiveCurrentStep(
+      highestCompleted >= config.steps.length
+        ? config.steps.length
         : highestCompleted + 1,
     );
   };
@@ -223,7 +237,7 @@ export default function Dashboard() {
 
       if (selectedStrategy?.title === strategy.title) {
         setSelectedStrategy(null);
-        resetMicrosoftWorkflow(false);
+        resetInteractiveWorkflow(false);
         updateScenarioStrategyBubble(selectedScenario, null);
       }
     } catch (error) {
@@ -310,11 +324,10 @@ ${strategy?.prompt || ""}`;
     setSelectedStrategy(strategy);
     updateScenarioStrategyBubble(selectedScenario, strategy);
 
-    if (strategy?.title === "Microsoft Method") {
-      resetMicrosoftWorkflow(true);
-    } else {
-      resetMicrosoftWorkflow(false);
-    }
+    const interactiveConfig =
+      getInteractiveStrategyConfig(strategy?.title);
+
+    resetInteractiveWorkflow(Boolean(interactiveConfig));
   };
 
   const requestChatChange = (type, value) => {
@@ -346,13 +359,15 @@ ${strategy?.prompt || ""}`;
     setShowChangeDialog(true);
   };
 
-  const prepareMicrosoftStep = (step) => {
-    if (selectedStrategy?.title !== "Microsoft Method") {
+  const prepareInteractiveStep = (step) => {
+    const config = getSelectedInteractiveConfig();
+
+    if (!config) {
       return;
     }
 
-    const completed = microsoftCompletedSteps.includes(step.id);
-    const isCurrentStep = step.id === microsoftCurrentStep;
+    const completed = interactiveCompletedSteps.includes(step.id);
+    const isCurrentStep = step.id === interactiveCurrentStep;
 
     if (completed || !isCurrentStep) {
       return;
@@ -361,11 +376,11 @@ ${strategy?.prompt || ""}`;
     // Step 1 is automatically combined with the scenario and the initial
     // code/request. Keep the textarea unchanged so the source code is preserved.
     if (step.id === 1 && !conversationStarted) {
-      setMicrosoftPreparedStep(1);
+      setInteractivePreparedStep(1);
       return;
     }
 
-    setMicrosoftPreparedStep(step.id);
+    setInteractivePreparedStep(step.id);
     setUserInput(step.prompt);
   };
 
@@ -390,7 +405,7 @@ ${strategy?.prompt || ""}`;
 
         setSelectedScenario(null);
         setSelectedStrategy(null);
-        resetMicrosoftWorkflow(false);
+        resetInteractiveWorkflow(false);
 
         setConversationStarted(false);
         setActiveConversationId(null);
@@ -441,22 +456,30 @@ ${strategy?.prompt || ""}`;
     }
 
     const trimmedInput = userInput.trim();
-    const isMicrosoft = selectedStrategy.title === "Microsoft Method";
-    const microsoftCompleted =
-      microsoftCompletedSteps.length >= microsoftSteps.length;
+    const interactiveConfig = getSelectedInteractiveConfig();
+    const isInteractive = Boolean(interactiveConfig);
+    const interactiveCompleted =
+      isInteractive &&
+      interactiveCompletedSteps.length >= interactiveConfig.steps.length;
 
-    if (!conversationStarted && currentMode === "verification" && !trimmedInput) {
+    if (
+      !conversationStarted &&
+      currentMode === "verification" &&
+      !trimmedInput
+    ) {
       alert("Please paste or upload the source code to analyze.");
       return;
     }
 
     if (
-      isMicrosoft &&
+      isInteractive &&
       conversationStarted &&
-      !microsoftCompleted &&
-      microsoftPreparedStep === null
+      !interactiveCompleted &&
+      interactivePreparedStep === null
     ) {
-      alert("Please select the next Microsoft Method step before sending.");
+      alert(
+        `Please select the next ${interactiveConfig.label} step before sending.`,
+      );
       return;
     }
 
@@ -469,14 +492,15 @@ ${strategy?.prompt || ""}`;
 
       const isFirstMessage = !conversationStarted;
       let promptToSend = "";
-      let microsoftStepBeingSent = null;
+      let interactiveStepBeingSent = null;
       let displayedUserContent = trimmedInput;
 
       if (isFirstMessage) {
-        if (isMicrosoft) {
-          const stepOne = microsoftSteps[0];
+        if (isInteractive) {
+          const stepOne = interactiveConfig.steps[0];
 
-          microsoftStepBeingSent = 1;
+          interactiveStepBeingSent = stepOne.id;
+
           displayedUserContent =
             currentMode === "verification"
               ? `${stepOne.prompt}
@@ -493,7 +517,7 @@ Program request:
 ${trimmedInput || selectedScenario?.prompt || ""}`;
 
           promptToSend = `
-Microsoft Method — Step 1
+${interactiveConfig.label} — Step ${stepOne.id}
 
 Scenario:
 ${selectedScenario?.prompt || ""}
@@ -509,12 +533,14 @@ ${displayedUserContent}
           });
         }
       } else {
-        microsoftStepBeingSent = isMicrosoft ? microsoftPreparedStep : null;
+        interactiveStepBeingSent = isInteractive
+          ? interactivePreparedStep
+          : null;
 
         const previousConversation = messagesRef.current
           .filter((message) => message.type !== "config")
           .map((message) => `${message.role}: ${message.content}`)
-          .join("\\n\\n");
+          .join("\n\n");
 
         promptToSend = `
 You are continuing the same conversation.
@@ -567,21 +593,21 @@ ${trimmedInput}
       setChatDirty(true);
       setChatLocked(true);
 
-      // A Microsoft step is completed only after a successful LLM response.
-      if (isMicrosoft && microsoftStepBeingSent !== null) {
-        const finishedStep = microsoftStepBeingSent;
+      // An interactive step is completed only after a successful LLM response.
+      if (isInteractive && interactiveStepBeingSent !== null) {
+        const finishedStep = interactiveStepBeingSent;
 
-        setMicrosoftCompletedSteps((previous) =>
+        setInteractiveCompletedSteps((previous) =>
           previous.includes(finishedStep)
             ? previous
             : [...previous, finishedStep].sort((a, b) => a - b),
         );
 
-        if (finishedStep < microsoftSteps.length) {
-          setMicrosoftCurrentStep(finishedStep + 1);
+        if (finishedStep < interactiveConfig.steps.length) {
+          setInteractiveCurrentStep(finishedStep + 1);
         }
 
-        setMicrosoftPreparedStep(null);
+        setInteractivePreparedStep(null);
       }
     } catch (error) {
       console.error("LLM generation error:", error);
@@ -836,7 +862,7 @@ ${trimmedInput}
 
       setSelectedScenario(matchingScenario || null);
       setSelectedStrategy(matchingStrategy || null);
-      restoreMicrosoftWorkflow(restoredMessages, matchingStrategy);
+      restoreInteractiveWorkflow(restoredMessages, matchingStrategy);
 
       setConversationStarted(restoredMessages.length > 0);
       setActiveConversationId(data.id);
@@ -883,7 +909,7 @@ ${trimmedInput}
     setChatDirty(false);
     setSecurityChecks([]);
     localStorage.removeItem(storageKey);
-    resetMicrosoftWorkflow(false);
+    resetInteractiveWorkflow(false);
   };
 
   const applyPendingChange = () => {
@@ -900,11 +926,10 @@ ${trimmedInput}
       setSelectedStrategy(pendingChange.value);
       updateScenarioStrategyBubble(selectedScenario, pendingChange.value);
 
-      if (pendingChange.value?.title === "Microsoft Method") {
-        resetMicrosoftWorkflow(true);
-      } else {
-        resetMicrosoftWorkflow(false);
-      }
+      const interactiveConfig =
+        getInteractiveStrategyConfig(pendingChange.value?.title);
+
+      resetInteractiveWorkflow(Boolean(interactiveConfig));
     }
   };
 
@@ -1854,12 +1879,15 @@ ${trimmedInput}
                 </div>
               )}
 
-              <div className="space-y-3">                {strategies.map((strategy, index) => {
+              <div className="space-y-3">
+                {strategies.map((strategy, index) => {
                   const isSelected =
                     selectedStrategy?.id === strategy.id;
 
-                  const isMicrosoft =
-                    strategy.title === "Microsoft Method";
+                  const interactiveConfig =
+                    getInteractiveStrategyConfig(strategy.title);
+
+                  const isInteractive = Boolean(interactiveConfig);
 
                   return (
                     <div
@@ -1890,15 +1918,11 @@ ${trimmedInput}
                           name="strategy"
                           className="w-5 h-5 mt-1 shrink-0"
                           checked={isSelected}
-                          onChange={() =>
-                            handleStrategySelect(strategy)
-                          }
+                          onChange={() => handleStrategySelect(strategy)}
                         />
 
                         <button
-                          onClick={() =>
-                            handleStrategySelect(strategy)
-                          }
+                          onClick={() => handleStrategySelect(strategy)}
                           className="
                             flex-1
                             text-left
@@ -1911,8 +1935,8 @@ ${trimmedInput}
                           </div>
 
                           <div className="text-sm text-gray-200 mt-1 line-clamp-3 break-words">
-                            {isMicrosoft
-                              ? "Interactive four-step security analysis"
+                            {isInteractive
+                              ? `Interactive ${interactiveConfig.steps.length}-step security workflow`
                               : strategy.prompt}
                           </div>
                         </button>
@@ -1956,10 +1980,10 @@ ${trimmedInput}
                         </button>
                       </div>
 
-                      {/* Microsoft Method sub-steps */}
-                      {isMicrosoft &&
+                      {/* Generic interactive strategy sub-steps */}
+                      {isInteractive &&
                         isSelected &&
-                        microsoftExpanded && (
+                        interactiveExpanded && (
                           <div
                             className="
                               ml-7
@@ -1972,29 +1996,24 @@ ${trimmedInput}
                             "
                           >
                             <div className="text-xs font-semibold text-blue-800 mb-2">
-                              Microsoft Method — 4 interactive steps
+                              {interactiveConfig.label} —{" "}
+                              {interactiveConfig.steps.length} interactive steps
                             </div>
 
-                            {microsoftSteps.map((step) => {
+                            {interactiveConfig.steps.map((step) => {
                               const completed =
-                                microsoftCompletedSteps.includes(
-                                  step.id
-                                );
+                                interactiveCompletedSteps.includes(step.id);
 
                               const active =
-                                step.id === microsoftCurrentStep &&
+                                step.id === interactiveCurrentStep &&
                                 !completed;
-
-                              const available = active;
 
                               return (
                                 <button
                                   key={step.id}
                                   type="button"
-                                  disabled={!available}
-                                  onClick={() =>
-                                    prepareMicrosoftStep(step)
-                                  }
+                                  disabled={!active}
+                                  onClick={() => prepareInteractiveStep(step)}
                                   className={`
                                     w-full
                                     flex
@@ -2007,12 +2026,10 @@ ${trimmedInput}
                                     transition
                                     ${
                                       completed
-                                        ? "bg-green-100 text-green-800 hover:bg-green-200"
+                                        ? "bg-green-100 text-green-800"
                                         : active
                                           ? "bg-white text-blue-800 border border-blue-300 hover:bg-blue-100"
-                                          : available
-                                            ? "bg-white text-gray-700 hover:bg-blue-100"
-                                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                          : "bg-gray-100 text-gray-400 cursor-not-allowed"
                                     }
                                   `}
                                 >
@@ -2030,7 +2047,7 @@ ${trimmedInput}
                                   >
                                     {completed
                                       ? "✓"
-                                      : available
+                                      : active
                                         ? step.id
                                         : "🔒"}
                                   </span>
@@ -2055,8 +2072,9 @@ ${trimmedInput}
                             })}
 
                             <div className="text-xs text-gray-500 pt-1">
-                              {microsoftCompletedSteps.length === microsoftSteps.length
-                                ? "Microsoft Method completed."
+                              {interactiveCompletedSteps.length ===
+                              interactiveConfig.steps.length
+                                ? `${interactiveConfig.label} completed.`
                                 : "Select the active step to prepare its prompt. You decide when to send it."}
                             </div>
                           </div>
