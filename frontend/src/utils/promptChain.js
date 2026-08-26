@@ -1,4 +1,4 @@
-﻿import { executeStrategies } from "./strategyEngine";
+import { executeStrategies } from "./strategyEngine";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -19,7 +19,7 @@ async function fetchLLM(prompt, selectedModel = DEFAULT_MODEL) {
       body: JSON.stringify({
         prompt,
         model: selectedModel,
-        max_tokens: 2000,
+        max_tokens: 1200,
       }),
     });
 

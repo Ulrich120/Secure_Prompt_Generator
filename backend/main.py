@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi import UploadFile, File, Form
@@ -59,7 +59,7 @@ def debug_files():
 # GENERATE ENDPOINT
 @app.post("/generate")
 async def generate(data: dict):
-    max_tokens = data.get("max_tokens", 2000)
+    max_tokens = data.get("max_tokens", 1200)
 
     try:
         prompt = data.get("prompt", "")

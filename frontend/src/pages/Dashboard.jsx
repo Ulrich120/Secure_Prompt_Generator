@@ -6,6 +6,7 @@ import { runPromptChain } from "../utils/promptChain";
 import MarkdownRenderer from "../components/MarkdownRenderer";
 import { exportAuditReport } from "../utils/pdfExporter";
 import { analyzeSecurityFeatures } from "../utils/securityAnalyzer";
+import { microsoftSteps } from "../strategies/microsoft/microsoftSteps";
 
 export default function Dashboard() {
   const { mode } = useParams();
@@ -46,6 +47,12 @@ export default function Dashboard() {
   const [selectedScenario, setSelectedScenario] = useState(null);
   const [selectedStrategy, setSelectedStrategy] = useState(null);
 
+  // Microsoft Method interactive workflow
+  const [microsoftExpanded, setMicrosoftExpanded] = useState(false);
+  const [microsoftCurrentStep, setMicrosoftCurrentStep] = useState(1);
+  const [microsoftCompletedSteps, setMicrosoftCompletedSteps] = useState([]);
+  const [microsoftPreparedStep, setMicrosoftPreparedStep] = useState(null);
+
   const [messages, setMessages] = useState([]);
   const [conversationStarted, setConversationStarted] = useState(false);
   const [activeConversationId, setActiveConversationId] = useState(null);
@@ -63,7 +70,6 @@ export default function Dashboard() {
   const [showScenarioForm, setShowScenarioForm] = useState(false);
 
   const [savedConversations, setSavedConversations] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
 
   const [securityChecks, setSecurityChecks] = useState([]);
@@ -71,13 +77,54 @@ export default function Dashboard() {
   const bottomRef = useRef(null);
   const messagesRef = useRef([]);
 
-  const storageKey = `secure_prompt_chat_${mode}`;
+  const storageKey = `secure_prompt_chat_${currentMode}`;
 
   const getTime = () =>
     new Date().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
+
+  const resetMicrosoftWorkflow = (expanded = false) => {
+    setMicrosoftExpanded(expanded);
+    setMicrosoftCurrentStep(1);
+    setMicrosoftCompletedSteps([]);
+    setMicrosoftPreparedStep(null);
+  };
+
+  const restoreMicrosoftWorkflow = (restoredMessages, strategy) => {
+    if (strategy?.title !== "Microsoft Method") {
+      resetMicrosoftWorkflow(false);
+      return;
+    }
+
+    const completed = new Set();
+
+    restoredMessages
+      .filter((message) => message.role === "user")
+      .forEach((message) => {
+        const match = String(message.content || "").match(
+          /Microsoft Method\s*[—-]\s*Step\s*([1-4])/i,
+        );
+
+        if (match) {
+          completed.add(Number(match[1]));
+        }
+      });
+
+    const completedSteps = [...completed].sort((a, b) => a - b);
+    const highestCompleted =
+      completedSteps.length > 0 ? Math.max(...completedSteps) : 0;
+
+    setMicrosoftExpanded(true);
+    setMicrosoftCompletedSteps(completedSteps);
+    setMicrosoftPreparedStep(null);
+    setMicrosoftCurrentStep(
+      highestCompleted >= microsoftSteps.length
+        ? microsoftSteps.length
+        : highestCompleted + 1,
+    );
+  };
 
   const refreshStrategies = async (modeToLoad = currentMode) => {
     const response = await fetch(`${API_URL}/strategies/${modeToLoad}`);
@@ -173,8 +220,14 @@ export default function Dashboard() {
       });
 
       await refreshStrategies();
+
+      if (selectedStrategy?.title === strategy.title) {
+        setSelectedStrategy(null);
+        resetMicrosoftWorkflow(false);
+        updateScenarioStrategyBubble(selectedScenario, null);
+      }
     } catch (error) {
-      console.error(error);
+      console.error("Delete strategy error:", error);
     }
   };
 
@@ -209,28 +262,31 @@ export default function Dashboard() {
   };
 
   const formatScenarioStrategyBubble = (scenario, strategy) => {
-    return `📋 Scénario : ${scenario?.title || "Aucun scénario sélectionné"}
+    return `📋 Scenario: ${scenario?.title || "No scenario selected"}
 
-    ${scenario?.prompt || ""}
+${scenario?.prompt || ""}
 
-    🎯 Stratégie : ${strategy?.title || "Aucune stratégie sélectionnée"}
+🎯 Strategy: ${strategy?.title || "No strategy selected"}
 
-    ${strategy?.prompt || ""}`;
+${strategy?.prompt || ""}`;
   };
 
   const updateScenarioStrategyBubble = (scenario, strategy) => {
-    setMessages((prev) => {
-      const withoutConfig = prev.filter((msg) => msg.type !== "config");
+    setMessages((previous) => {
+      const withoutConfig = previous.filter(
+        (message) => message.type !== "config",
+      );
 
-      // Aucun prompt ne doit être affiché tant que
-      // le scénario ET la stratégie ne sont pas sélectionnés.
+      // Do not display the configuration bubble until
+      // both a scenario and a strategy are selected.
       if (!scenario || !strategy) {
+        messagesRef.current = withoutConfig;
         return withoutConfig;
       }
 
       const content = formatScenarioStrategyBubble(scenario, strategy);
 
-      return [
+      const nextMessages = [
         {
           role: "user",
           type: "config",
@@ -239,45 +295,78 @@ export default function Dashboard() {
         },
         ...withoutConfig,
       ];
+
+      messagesRef.current = nextMessages;
+      return nextMessages;
     });
+  };
+
+  const applyScenarioSelection = (scenario) => {
+    setSelectedScenario(scenario);
+    updateScenarioStrategyBubble(scenario, selectedStrategy);
+  };
+
+  const applyStrategySelection = (strategy) => {
+    setSelectedStrategy(strategy);
+    updateScenarioStrategyBubble(selectedScenario, strategy);
+
+    if (strategy?.title === "Microsoft Method") {
+      resetMicrosoftWorkflow(true);
+    } else {
+      resetMicrosoftWorkflow(false);
+    }
   };
 
   const requestChatChange = (type, value) => {
     const hasLLMResponse = messages.some(
-      (msg) => msg.role === "assistant" && msg.type === "response",
+      (message) =>
+        message.role === "assistant" && message.type === "response",
     );
 
     const hasRealConversation = chatLocked && hasLLMResponse;
 
-    // Avant le démarrage réel du chat :
-    // l'utilisateur peut librement lire et modifier ses choix.
+    // Before the first LLM response, the user can freely change the selection.
     if (!hasRealConversation) {
       if (type === "scenario") {
-        setSelectedScenario(value);
-
-        updateScenarioStrategyBubble(value, selectedStrategy);
+        applyScenarioSelection(value);
       }
 
       if (type === "strategy") {
-        setSelectedStrategy(value);
-
-        updateScenarioStrategyBubble(selectedScenario, value);
+        applyStrategySelection(value);
       }
 
       setConversationStarted(false);
       setActiveConversationId(null);
-
       return;
     }
 
-    // Après une réponse du LLM :
-    // protéger la conversation en cours.
-    setPendingChange({
-      type,
-      value,
-    });
-
+    // After the first LLM response, changing the scenario or strategy
+    // requires an explicit decision about the current conversation.
+    setPendingChange({ type, value });
     setShowChangeDialog(true);
+  };
+
+  const prepareMicrosoftStep = (step) => {
+    if (selectedStrategy?.title !== "Microsoft Method") {
+      return;
+    }
+
+    const completed = microsoftCompletedSteps.includes(step.id);
+    const isCurrentStep = step.id === microsoftCurrentStep;
+
+    if (completed || !isCurrentStep) {
+      return;
+    }
+
+    // Step 1 is automatically combined with the scenario and the initial
+    // code/request. Keep the textarea unchanged so the source code is preserved.
+    if (step.id === 1 && !conversationStarted) {
+      setMicrosoftPreparedStep(1);
+      return;
+    }
+
+    setMicrosoftPreparedStep(step.id);
+    setUserInput(step.prompt);
   };
 
   const handleScenarioSelect = (scenario) => {
@@ -290,7 +379,7 @@ export default function Dashboard() {
 
   /* USE EFFECT */
 
-  /* 1. Quand le mode change : reset propre + chargement des données du mode */
+  /* Reset the workspace and reload mode-specific data. */
   useEffect(() => {
     const handleModeChange = async () => {
       try {
@@ -301,6 +390,7 @@ export default function Dashboard() {
 
         setSelectedScenario(null);
         setSelectedStrategy(null);
+        resetMicrosoftWorkflow(false);
 
         setConversationStarted(false);
         setActiveConversationId(null);
@@ -327,72 +417,124 @@ export default function Dashboard() {
     handleModeChange();
   }, [currentMode]);
 
-  /* 2. Garder messagesRef synchronisé */
+  /* Keep messagesRef synchronized with React state. */
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
-  /* 3. Scroll automatique vers le dernier message */
+  /* Scroll to the latest message. */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({
       behavior: "smooth",
     });
   }, [messages, loading]);
 
-  /* 4. Sauvegarde locale temporaire du chat courant */
+  /* Temporarily persist the current chat locally. */
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(messages));
   }, [messages, storageKey]);
 
   const sendToLLM = async () => {
     if (!selectedScenario || !selectedStrategy) {
-      alert("Veuillez sélectionner un scénario et une stratégie.");
+      alert("Please select a scenario and a strategy.");
       return;
     }
 
-    if (!userInput.trim() && conversationStarted) {
+    const trimmedInput = userInput.trim();
+    const isMicrosoft = selectedStrategy.title === "Microsoft Method";
+    const microsoftCompleted =
+      microsoftCompletedSteps.length >= microsoftSteps.length;
+
+    if (!conversationStarted && currentMode === "verification" && !trimmedInput) {
+      alert("Please paste or upload the source code to analyze.");
+      return;
+    }
+
+    if (
+      isMicrosoft &&
+      conversationStarted &&
+      !microsoftCompleted &&
+      microsoftPreparedStep === null
+    ) {
+      alert("Please select the next Microsoft Method step before sending.");
+      return;
+    }
+
+    if (!trimmedInput && conversationStarted) {
       return;
     }
 
     try {
       setLoading(true);
 
-      const userMessage = userInput.trim()
+      const isFirstMessage = !conversationStarted;
+      let promptToSend = "";
+      let microsoftStepBeingSent = null;
+      let displayedUserContent = trimmedInput;
+
+      if (isFirstMessage) {
+        if (isMicrosoft) {
+          const stepOne = microsoftSteps[0];
+
+          microsoftStepBeingSent = 1;
+          displayedUserContent =
+            currentMode === "verification"
+              ? `${stepOne.prompt}
+
+Source code:
+
+\`\`\`
+${trimmedInput}
+\`\`\``
+              : `${stepOne.prompt}
+
+Program request:
+
+${trimmedInput || selectedScenario?.prompt || ""}`;
+
+          promptToSend = `
+Microsoft Method — Step 1
+
+Scenario:
+${selectedScenario?.prompt || ""}
+
+${displayedUserContent}
+`;
+        } else {
+          promptToSend = buildPrompt({
+            mode: currentMode,
+            scenario: selectedScenario,
+            strategy: selectedStrategy,
+            userInput: trimmedInput,
+          });
+        }
+      } else {
+        microsoftStepBeingSent = isMicrosoft ? microsoftPreparedStep : null;
+
+        const previousConversation = messagesRef.current
+          .filter((message) => message.type !== "config")
+          .map((message) => `${message.role}: ${message.content}`)
+          .join("\\n\\n");
+
+        promptToSend = `
+You are continuing the same conversation.
+
+Previous conversation:
+${previousConversation}
+
+User question:
+${trimmedInput}
+`;
+      }
+
+      const userMessage = displayedUserContent
         ? {
             role: "user",
             type: "message",
-            content: userInput,
+            content: displayedUserContent,
             timestamp: getTime(),
           }
         : null;
-
-      let promptToSend = "";
-
-      if (!conversationStarted) {
-        promptToSend = buildPrompt({
-          mode: currentMode,
-          scenario: selectedScenario,
-          strategy: selectedStrategy,
-          userInput,
-        });
-
-        setConversationStarted(true);
-      } else {
-        const historyForPrompt = [
-          ...messagesRef.current,
-          ...(userMessage ? [userMessage] : []),
-        ];
-
-        promptToSend = `
-          You are continuing a conversation.
-
-          Previous conversation:
-          ${historyForPrompt.map((msg) => `${msg.role}: ${msg.content}`).join("\n\n")}
-
-          User question:
-          ${userInput}
-        `;
-      }
 
       const result = await runPromptChain({
         generatedPrompt: promptToSend,
@@ -400,7 +542,7 @@ export default function Dashboard() {
         selectedModel: model,
         mode: currentMode,
         scenario: selectedScenario,
-        userInput,
+        userInput: trimmedInput,
       });
 
       const assistantMessage = {
@@ -410,7 +552,6 @@ export default function Dashboard() {
         timestamp: getTime(),
         securityChecks: analyzeSecurityFeatures(result.finalResponse),
       };
-      console.log("ASSISTANT MESSAGE:", assistantMessage);
 
       const updatedMessages = [
         ...messagesRef.current,
@@ -421,16 +562,35 @@ export default function Dashboard() {
       setMessages(updatedMessages);
       messagesRef.current = updatedMessages;
 
+      setConversationStarted(true);
       setUserInput("");
       setChatDirty(true);
       setChatLocked(true);
+
+      // A Microsoft step is completed only after a successful LLM response.
+      if (isMicrosoft && microsoftStepBeingSent !== null) {
+        const finishedStep = microsoftStepBeingSent;
+
+        setMicrosoftCompletedSteps((previous) =>
+          previous.includes(finishedStep)
+            ? previous
+            : [...previous, finishedStep].sort((a, b) => a - b),
+        );
+
+        if (finishedStep < microsoftSteps.length) {
+          setMicrosoftCurrentStep(finishedStep + 1);
+        }
+
+        setMicrosoftPreparedStep(null);
+      }
     } catch (error) {
-      console.error(error);
+      console.error("LLM generation error:", error);
 
       const errorMessage = {
         role: "assistant",
         type: "error",
-        content: "Erreur lors de la génération.",
+        content:
+          "The request could not be completed. Please verify the backend connection and try again.",
         timestamp: getTime(),
       };
 
@@ -467,7 +627,7 @@ export default function Dashboard() {
 
       event.target.value = "";
     } catch (error) {
-      console.error("Erreur upload scénario :", error);
+      console.error("Scenario upload error:", error);
     }
   };
 
@@ -574,9 +734,10 @@ export default function Dashboard() {
 
       if (selectedScenario?.title === scenario.title) {
         setSelectedScenario(null);
+        updateScenarioStrategyBubble(null, selectedStrategy);
       }
     } catch (error) {
-      console.error("Delete error:", error);
+      console.error("Delete scenario error:", error);
     }
   };
 
@@ -652,56 +813,49 @@ export default function Dashboard() {
     setShowChangeDialog(false);
     setPendingChange(null);
 
-    const response = await fetch(`${API_URL}/conversations/${id}`);
-    const data = await response.json();
+    try {
+      const response = await fetch(`${API_URL}/conversations/${id}`);
 
-    const restoredMessages = data.messages || [];
+      if (!response.ok) {
+        throw new Error(`Unable to load conversation ${id}.`);
+      }
 
-    setMessages(restoredMessages);
-    messagesRef.current = restoredMessages;
+      const data = await response.json();
+      const restoredMessages = Array.isArray(data.messages) ? data.messages : [];
 
-    const lastAssistant = [...restoredMessages]
-      .reverse()
-      .find((msg) => msg.role === "assistant");
+      setMessages(restoredMessages);
+      messagesRef.current = restoredMessages;
 
-    if (lastAssistant) {
-      setSecurityChecks(analyzeSecurityFeatures(lastAssistant.content));
-    } else {
-      setSecurityChecks([]);
+      const matchingScenario = scenarios.find(
+        (scenario) => scenario.title === data.scenario_title,
+      );
+
+      const matchingStrategy = strategies.find(
+        (strategy) => strategy.title === data.strategy_title,
+      );
+
+      setSelectedScenario(matchingScenario || null);
+      setSelectedStrategy(matchingStrategy || null);
+      restoreMicrosoftWorkflow(restoredMessages, matchingStrategy);
+
+      setConversationStarted(restoredMessages.length > 0);
+      setActiveConversationId(data.id);
+      setChatDirty(false);
+      setChatLocked(
+        restoredMessages.some(
+          (message) =>
+            message.role === "assistant" && message.type === "response",
+        ),
+      );
+      setUserInput("");
+
+      if (data.model) {
+        setModel(data.model);
+      }
+    } catch (error) {
+      console.error("Open conversation error:", error);
+      alert("Unable to open this conversation.");
     }
-
-    setConversationStarted(true);
-    setActiveConversationId(data.id);
-    setChatDirty(false);
-    setChatLocked(true);
-
-    if (data.model) {
-      setModel(data.model);
-    }
-
-    const matchingScenario = scenarios.find(
-      (scenario) => scenario.title === data.scenario_title,
-    );
-
-    if (matchingScenario) {
-      setSelectedScenario(matchingScenario);
-    }
-
-    const matchingStrategy = strategies.find(
-      (strategy) => strategy.title === data.strategy_title,
-    );
-
-    if (matchingStrategy) {
-      setSelectedStrategy(matchingStrategy);
-    }
-  };
-
-  const confirmChatChange = () => {
-    if (messages.length === 0) return true;
-
-    return window.confirm(
-      "Un chat est en cours. Sauvegardez ou terminez ce chat avant de changer de scénario ou de stratégie. Voulez-vous vraiment changer ?",
-    );
   };
 
   const deleteSavedConversation = async (id) => {
@@ -719,29 +873,59 @@ export default function Dashboard() {
     setShowChangeDialog(false);
   };
 
-  const confirmChange = async () => {
-    const messagesToSave = [...messagesRef.current];
-
-    await saveConversation(messagesToSave);
-
+  const resetConversationState = () => {
     setMessages([]);
     messagesRef.current = [];
-
     setConversationStarted(false);
     setUserInput("");
     setActiveConversationId(null);
     setChatLocked(false);
+    setChatDirty(false);
+    setSecurityChecks([]);
+    localStorage.removeItem(storageKey);
+    resetMicrosoftWorkflow(false);
+  };
 
-    if (pendingChange?.type === "scenario") {
+  const applyPendingChange = () => {
+    if (!pendingChange) {
+      return;
+    }
+
+    if (pendingChange.type === "scenario") {
       setSelectedScenario(pendingChange.value);
       updateScenarioStrategyBubble(pendingChange.value, selectedStrategy);
     }
 
-    if (pendingChange?.type === "strategy") {
+    if (pendingChange.type === "strategy") {
       setSelectedStrategy(pendingChange.value);
       updateScenarioStrategyBubble(selectedScenario, pendingChange.value);
+
+      if (pendingChange.value?.title === "Microsoft Method") {
+        resetMicrosoftWorkflow(true);
+      } else {
+        resetMicrosoftWorkflow(false);
+      }
+    }
+  };
+
+  const confirmChange = async () => {
+    try {
+      await saveConversation([...messagesRef.current]);
+      resetConversationState();
+      applyPendingChange();
+    } catch (error) {
+      console.error("Save and change error:", error);
+      alert("The current conversation could not be saved.");
+      return;
     }
 
+    setPendingChange(null);
+    setShowChangeDialog(false);
+  };
+
+  const confirmChangeWithoutSaving = () => {
+    resetConversationState();
+    applyPendingChange();
     setPendingChange(null);
     setShowChangeDialog(false);
   };
@@ -781,6 +965,20 @@ export default function Dashboard() {
     setUserInput(content);
 
     event.target.value = "";
+  };
+
+  const startNewChat = async () => {
+    try {
+      await saveConversation([...messagesRef.current]);
+    } catch (error) {
+      console.error("New chat save error:", error);
+      alert("The current conversation could not be saved.");
+      return;
+    }
+
+    resetConversationState();
+    setSelectedScenario(null);
+    setSelectedStrategy(null);
   };
 
   const handleExportReport = () => {
@@ -937,7 +1135,7 @@ export default function Dashboard() {
               </div>
 
               <h2 className="text-xl font-bold mb-4 text-white">
-                📂 Scénarios
+                📂 Scenarios
               </h2>
 
               <p className="text-sm text-gray-300 italic mb-4">
@@ -960,7 +1158,7 @@ export default function Dashboard() {
                   block
                 "
               >
-                ➕ Upload scénario
+                ➕ Upload scenario
                 <input
                   type="file"
                   accept=".txt"
@@ -983,7 +1181,7 @@ export default function Dashboard() {
                   transition
                 "
               >
-                ✍️ Write scénario
+                ✍️ Write scenario
               </button>
 
               {showScenarioForm && (
@@ -1196,24 +1394,7 @@ export default function Dashboard() {
 
                 {/* RIGHT SIDE */}
                 <button
-                  onClick={async () => {
-                    const messagesToSave = [...messagesRef.current];
-
-                    await saveConversation(messagesToSave);
-
-                    setMessages([]);
-                    setSecurityChecks([]);
-                    messagesRef.current = [];
-
-                    setConversationStarted(false);
-                    setUserInput("");
-                    setSelectedScenario(null);
-                    setSelectedStrategy(null);
-                    setActiveConversationId(null);
-                    setChatDirty(false);
-                    setChatLocked(false);
-                    localStorage.removeItem(storageKey);
-                  }}
+                  onClick={startNewChat}
                   className="
                   px-4
                   py-2
@@ -1326,7 +1507,7 @@ export default function Dashboard() {
                           <span>
                             {message.role === "user"
                               ? message.type === "config"
-                                ? "👤 You — Scénario + Stratégie"
+                                ? "👤 You — Scenario + Strategy"
                                 : "👤 You"
                               : "🤖 LLM"}
                           </span>
@@ -1338,10 +1519,10 @@ export default function Dashboard() {
                                   await navigator.clipboard.writeText(
                                     message.content,
                                   );
-                                  alert("Réponse copiée !");
+                                  alert("Response copied.");
                                 } catch (error) {
                                   console.error("Copy error:", error);
-                                  alert("Impossible de copier la réponse.");
+                                  alert("Unable to copy the response.");
                                 }
                               }}
                               className="
@@ -1385,7 +1566,7 @@ export default function Dashboard() {
                           message.securityChecks.length > 0 && (
                             <div className="mt-6 bg-white rounded-2xl border p-5 shadow-sm">
                               <h3 className="text-lg font-bold mb-4 text-purple-900">
-                                🛡 Security Checklist
+                                🛡️ Security Checklist
                               </h3>
 
                               <div className="grid grid-cols-2 gap-3">
@@ -1535,7 +1716,7 @@ export default function Dashboard() {
             {/* SCROLLABLE CONTENT */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1">
               <div className="bg-gray-200 p-4 rounded-xl mb-6">
-                <h2 className="text-black font-bold mb-2">🤖 Modèle LLM</h2>
+                <h2 className="text-black font-bold mb-2">🤖 LLM Model</h2>
 
                 <select
                   value={model}
@@ -1563,7 +1744,7 @@ export default function Dashboard() {
               </div>
 
               <h2 className="text-xl font-bold mb-4 text-white">
-                🧠 Stratégies
+                🧠 Strategies
               </h2>
 
               <label
@@ -1673,92 +1854,216 @@ export default function Dashboard() {
                 </div>
               )}
 
-              <div className="space-y-3">
-                {strategies.map((strategy, index) => (
-                  <div
-                    key={strategy.id || index}
-                    className={`
-                    flex
-                    items-start
-                    gap-2
-                    w-full
-                    p-3
-                    rounded-xl
-                    transition
-                    text-white
-                    overflow-hidden
-                    ${
-                      selectedStrategy?.id === strategy.id
-                        ? "bg-blue-500 hover:bg-blue-600"
-                        : "bg-gray-600 hover:bg-gray-700"
-                    }
-                  `}
-                  >
-                    <input
-                      type="radio"
-                      name="strategy"
-                      className="w-5 h-5 mt-1 shrink-0"
-                      checked={selectedStrategy?.id === strategy.id}
-                      onChange={() => handleStrategySelect(strategy)}
-                    />
+              <div className="space-y-3">                {strategies.map((strategy, index) => {
+                  const isSelected =
+                    selectedStrategy?.id === strategy.id;
 
-                    <button
-                      onClick={() => handleStrategySelect(strategy)}
-                      className="
-                      flex-1
-                      text-left
-                      overflow-hidden
-                      min-w-0
-                    "
+                  const isMicrosoft =
+                    strategy.title === "Microsoft Method";
+
+                  return (
+                    <div
+                      key={strategy.id || index}
+                      className="space-y-2"
                     >
-                      <div className="font-bold truncate">
-                        ✨ {strategy.title}
+                      {/* Main strategy card */}
+                      <div
+                        className={`
+                          flex
+                          items-start
+                          gap-2
+                          w-full
+                          p-3
+                          rounded-xl
+                          transition
+                          text-white
+                          overflow-hidden
+                          ${
+                            isSelected
+                              ? "bg-blue-500 hover:bg-blue-600"
+                              : "bg-gray-600 hover:bg-gray-700"
+                          }
+                        `}
+                      >
+                        <input
+                          type="radio"
+                          name="strategy"
+                          className="w-5 h-5 mt-1 shrink-0"
+                          checked={isSelected}
+                          onChange={() =>
+                            handleStrategySelect(strategy)
+                          }
+                        />
+
+                        <button
+                          onClick={() =>
+                            handleStrategySelect(strategy)
+                          }
+                          className="
+                            flex-1
+                            text-left
+                            overflow-hidden
+                            min-w-0
+                          "
+                        >
+                          <div className="font-bold truncate">
+                            ✨ {strategy.title}
+                          </div>
+
+                          <div className="text-sm text-gray-200 mt-1 line-clamp-3 break-words">
+                            {isMicrosoft
+                              ? "Interactive four-step security analysis"
+                              : strategy.prompt}
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => editStrategy(strategy)}
+                          className="
+                            w-7
+                            h-7
+                            rounded-full
+                            bg-yellow-400
+                            hover:bg-yellow-500
+                            flex
+                            items-center
+                            justify-center
+                            shrink-0
+                            text-sm
+                          "
+                          title="Update"
+                        >
+                          ✏️
+                        </button>
+
+                        <button
+                          onClick={() => deleteStrategy(strategy)}
+                          className="
+                            w-7
+                            h-7
+                            rounded-full
+                            bg-red-500
+                            hover:bg-red-600
+                            flex
+                            items-center
+                            justify-center
+                            shrink-0
+                            text-sm
+                          "
+                          title="Delete"
+                        >
+                          🗑️
+                        </button>
                       </div>
 
-                      <div className="text-sm text-gray-200 mt-1 line-clamp-3 break-words">
-                        {strategy.prompt}
-                      </div>
-                    </button>
+                      {/* Microsoft Method sub-steps */}
+                      {isMicrosoft &&
+                        isSelected &&
+                        microsoftExpanded && (
+                          <div
+                            className="
+                              ml-7
+                              p-3
+                              rounded-xl
+                              border
+                              border-blue-200
+                              bg-blue-50
+                              space-y-2
+                            "
+                          >
+                            <div className="text-xs font-semibold text-blue-800 mb-2">
+                              Microsoft Method — 4 interactive steps
+                            </div>
 
-                    <button
-                      onClick={() => editStrategy(strategy)}
-                      className="
-                      w-7
-                      h-7
-                      rounded-full
-                      bg-yellow-400
-                      hover:bg-yellow-500
-                      flex
-                      items-center
-                      justify-center
-                      shrink-0
-                      text-sm
-                    "
-                      title="Update"
-                    >
-                      ✏️
-                    </button>
+                            {microsoftSteps.map((step) => {
+                              const completed =
+                                microsoftCompletedSteps.includes(
+                                  step.id
+                                );
 
-                    <button
-                      onClick={() => deleteStrategy(strategy)}
-                      className="
-                      w-7
-                      h-7
-                      rounded-full
-                      bg-red-500
-                      hover:bg-red-600
-                      flex
-                      items-center
-                      justify-center
-                      shrink-0
-                      text-sm
-                    "
-                      title="Delete"
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                ))}
+                              const active =
+                                step.id === microsoftCurrentStep &&
+                                !completed;
+
+                              const available = active;
+
+                              return (
+                                <button
+                                  key={step.id}
+                                  type="button"
+                                  disabled={!available}
+                                  onClick={() =>
+                                    prepareMicrosoftStep(step)
+                                  }
+                                  className={`
+                                    w-full
+                                    flex
+                                    items-center
+                                    gap-3
+                                    p-2.5
+                                    rounded-lg
+                                    text-left
+                                    text-sm
+                                    transition
+                                    ${
+                                      completed
+                                        ? "bg-green-100 text-green-800 hover:bg-green-200"
+                                        : active
+                                          ? "bg-white text-blue-800 border border-blue-300 hover:bg-blue-100"
+                                          : available
+                                            ? "bg-white text-gray-700 hover:bg-blue-100"
+                                            : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                    }
+                                  `}
+                                >
+                                  <span
+                                    className="
+                                      w-7
+                                      h-7
+                                      shrink-0
+                                      rounded-full
+                                      flex
+                                      items-center
+                                      justify-center
+                                      font-bold
+                                    "
+                                  >
+                                    {completed
+                                      ? "✓"
+                                      : available
+                                        ? step.id
+                                        : "🔒"}
+                                  </span>
+
+                                  <span className="flex-1">
+                                    <span className="font-semibold">
+                                      Step {step.id}
+                                    </span>
+
+                                    <span className="block text-xs mt-0.5">
+                                      {step.shortTitle}
+                                    </span>
+                                  </span>
+
+                                  {active && (
+                                    <span className="text-xs font-semibold">
+                                      Next
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+
+                            <div className="text-xs text-gray-500 pt-1">
+                              {microsoftCompletedSteps.length === microsoftSteps.length
+                                ? "Microsoft Method completed."
+                                : "Select the active step to prepare its prompt. You decide when to send it."}
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -1808,11 +2113,11 @@ export default function Dashboard() {
             </div>
 
             <p className="text-sm text-gray-600 mb-6">
-              Changing the scenario or strategy will save the current chat and
-              start a new conversation.
+              Changing the scenario or strategy starts a new conversation.
+              Choose whether to keep, discard, or save the current chat.
             </p>
 
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-wrap justify-end gap-3">
               <button
                 onClick={cancelChange}
                 className="
@@ -1829,18 +2134,33 @@ export default function Dashboard() {
               </button>
 
               <button
+                onClick={confirmChangeWithoutSaving}
+                className="
+                  px-4
+                  py-2
+                  rounded-lg
+                  bg-red-500
+                  hover:bg-red-600
+                  text-white
+                  font-semibold
+                "
+              >
+                Continue without Saving
+              </button>
+
+              <button
                 onClick={confirmChange}
                 className="
-                px-4
-                py-2
-                rounded-lg
-                bg-blue-500
-                hover:bg-blue-600
-                text-white
-                font-semibold
-              "
+                  px-4
+                  py-2
+                  rounded-lg
+                  bg-blue-500
+                  hover:bg-blue-600
+                  text-white
+                  font-semibold
+                "
               >
-                Save & Create New Chat
+                Save & Start New Chat
               </button>
             </div>
           </div>

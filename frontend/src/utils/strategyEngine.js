@@ -11,46 +11,52 @@ export async function executeStrategies({
   const steps = [];
 
   if (!strategy) {
-    const currentResponse = await fetchLLM(basePrompt);
-
-    steps.push({
-      title: "Initial Prompt",
-      prompt: basePrompt,
-      content: currentResponse,
-    });
+    const response = await fetchLLM(basePrompt);
 
     return {
-      finalResponse: currentResponse,
-      chainResults: steps,
+      finalResponse: response,
+      chainResults: [
+        {
+          title: "Initial Prompt",
+          prompt: basePrompt,
+          content: response,
+        },
+      ],
     };
   }
 
   const registryEntry = strategyRegistry[strategy.title];
 
   /*
-   * Old strategies are still stored directly as functions.
-   * New strategies can use an object with a type and an executor.
-   * This keeps the old code working while allowing multi-step strategies.
+   * Interactive multi-step strategies do not execute their
+   * complete workflow automatically.
+   *
+   * One click on Send = one LLM request.
    */
-  const isStructuredEntry =
-    registryEntry &&
-    typeof registryEntry === "object" &&
-    typeof registryEntry.executor === "function";
+  if (registryEntry?.type === "interactive-multi-step") {
+    const response = await fetchLLM(basePrompt);
 
-  const strategyType = isStructuredEntry
-    ? registryEntry.type
-    : "post-process";
-
-  const strategyExecutor = isStructuredEntry
-    ? registryEntry.executor
-    : registryEntry;
+    return {
+      finalResponse: response,
+      chainResults: [
+        {
+          title: "Interactive Microsoft Step",
+          prompt: basePrompt,
+          content: response,
+        },
+      ],
+    };
+  }
 
   /*
-   * Multi-step strategies control their complete execution flow.
-   * They receive the original prompt and the complete user context.
+   * New automatic multi-step strategies can still use
+   * their own executor later, for example Threat Modeling.
    */
-  if (strategyType === "multi-step" && strategyExecutor) {
-    const result = await strategyExecutor({
+  if (
+    registryEntry?.type === "multi-step" &&
+    typeof registryEntry.executor === "function"
+  ) {
+    const result = await registryEntry.executor({
       basePrompt,
       mode,
       scenario,
@@ -66,8 +72,7 @@ export async function executeStrategies({
   }
 
   /*
-   * Existing strategies keep the previous behavior:
-   * first generate a response, then apply the strategy executor.
+   * Normal strategies keep the existing behavior.
    */
   let currentResponse = await fetchLLM(basePrompt);
 
@@ -77,9 +82,12 @@ export async function executeStrategies({
     content: currentResponse,
   });
 
-  if (!strategyExecutor) {
-    console.warn("No executor found for:", strategy.title);
+  const strategyExecutor =
+    typeof registryEntry === "function"
+      ? registryEntry
+      : registryEntry?.executor;
 
+  if (!strategyExecutor) {
     return {
       finalResponse: currentResponse,
       chainResults: steps,
