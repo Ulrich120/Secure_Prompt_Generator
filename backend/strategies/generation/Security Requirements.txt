@@ -1,7 +1,0 @@
-Apply strict security requirements.
-
-Ensure:
-- Input validation and sanitization
-- Use of secure authentification
-- Secure sessions management
-- Encryption best practices

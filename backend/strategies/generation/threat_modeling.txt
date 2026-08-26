@@ -1,12 +1,24 @@
-Title: Threat Modeling
+﻿Title: Threat Modeling
 
-Before generating the code, identify possible threats.
+This strategy uses a two-step interactive workflow.
 
-Use this structure:
-1. assets to protect
-2. possible attackers
-3. attack vectors
-4. security controls
-5. secure implementation
+Step 1 — Identify the Threats
+Create a threat model for the selected scenario before generating code.
 
-Then generate the secure code.
+Analyze:
+- assets to protect;
+- entry points and attack surface;
+- trust boundaries;
+- threat actors;
+- realistic security threats;
+- potential impact and severity;
+- relevant CWE or OWASP categories when applicable.
+
+Do not generate the implementation during Step 1.
+
+Step 2 — Generate Secure Code
+After the threat model has been reviewed, generate the requested implementation using the threats identified in Step 1.
+
+Map the important threats to appropriate security controls and apply those controls directly in the generated code.
+
+The user explicitly starts each step.
