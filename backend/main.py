@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi import UploadFile, File, Form
@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from scenario_loader import load_scenarios
 from strategy_loader import load_strategies
+from services.owasp_content_loader import fetch_owasp_resources
 
 from dotenv import load_dotenv
 import requests
@@ -20,6 +21,15 @@ import os
 load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+
+class OwaspResourceRequest(BaseModel):
+    title: str
+    url: str
+
+
+class OwaspContextRequest(BaseModel):
+    resources: list[OwaspResourceRequest]
 
 # FASTAPI APP
 app = FastAPI()
@@ -54,6 +64,63 @@ def debug_files():
 
     except Exception as e:
         return {"error": str(e)}
+
+
+# OWASP CONTEXT ENDPOINT
+@app.post("/owasp-context")
+def get_owasp_context(data: OwaspContextRequest):
+    """
+    Retrieve the real textual content of approved OWASP Cheat Sheets.
+
+    The URL allow-list, HTTPS requirement, extraction, size limit,
+    timeout, redirect validation, and local cache are enforced by
+    services.owasp_content_loader.
+    """
+
+    resources = [
+        resource.model_dump()
+        for resource in data.resources
+    ]
+
+    if not resources:
+        return {
+            "resources": [],
+            "context": "",
+        }
+
+    results = fetch_owasp_resources(resources)
+
+    successful_resources = [
+        resource
+        for resource in results
+        if resource.get("status") == "success"
+        and resource.get("content")
+    ]
+
+    context_parts = []
+
+    for index, resource in enumerate(successful_resources, start=1):
+        context_parts.append(
+            f"""
+OWASP SECURITY REFERENCE {index}
+
+Title:
+{resource["title"]}
+
+Source:
+{resource["url"]}
+
+Content:
+{resource["content"]}
+""".strip()
+        )
+
+    context = "\n\n".join(context_parts)
+
+    return {
+        "resources": results,
+        "context": context,
+    }
 
 
 # GENERATE ENDPOINT
