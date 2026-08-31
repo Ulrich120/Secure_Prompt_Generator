@@ -1,14 +1,123 @@
-Title: OWASP Compliance
+﻿Title: OWASP Compliance
 
-Generate code that follows OWASP secure coding recommendations.
+Generate secure code by applying OWASP recommendations that are relevant to the selected scenario.
 
-Check:
-- Authentication
-- Authorization
-- Input validation
-- Injection prevention
-- XSS prevention
-- CSRF protection
-- Session management
-- Secure headers
-- Logging and monitoring
+Do not mechanically apply every security control. First identify the security concerns that are relevant to the requested functionality, then apply the appropriate OWASP guidance.
+
+Scenario-specific OWASP guidance:
+
+1. Authentication and Login
+For authentication, login, JWT, and password-related scenarios, consider:
+- OWASP Authentication Cheat Sheet
+- OWASP Password Storage Cheat Sheet
+- OWASP JSON Web Token for Java Cheat Sheet when JWT concepts are applicable
+- OWASP Session Management Cheat Sheet
+- OWASP Forgot Password Cheat Sheet for password recovery flows
+
+Verify:
+- secure credential handling;
+- strong password storage;
+- resistance to brute-force attacks;
+- secure session or token lifecycle;
+- authentication error handling;
+- account enumeration prevention;
+- secure password reset mechanisms.
+
+2. Authorization and API Security
+For APIs and protected resources, consider:
+- OWASP Authorization Cheat Sheet
+- OWASP REST Security Cheat Sheet
+- OWASP API Security Top 10
+
+Verify:
+- server-side authorization;
+- least privilege;
+- object-level authorization;
+- function-level authorization;
+- secure API authentication;
+- restricted HTTP methods;
+- appropriate request validation;
+- safe error responses.
+
+3. SQL and Database Access
+For database queries and SQL-related scenarios, consider:
+- OWASP SQL Injection Prevention Cheat Sheet
+- OWASP Query Parameterization Cheat Sheet
+- OWASP Input Validation Cheat Sheet
+
+Verify:
+- parameterized queries;
+- no unsafe query concatenation;
+- allow-list validation where appropriate;
+- least-privileged database access;
+- safe database error handling.
+
+4. Cross-Site Scripting
+For HTML rendering, forms, and user-controlled content, consider:
+- OWASP Cross Site Scripting Prevention Cheat Sheet
+- OWASP Input Validation Cheat Sheet
+- OWASP DOM based XSS Prevention Cheat Sheet when applicable
+
+Verify:
+- contextual output encoding;
+- safe HTML handling;
+- input validation;
+- safe DOM operations;
+- avoidance of dangerous rendering functions.
+
+5. Cross-Site Request Forgery
+For state-changing web forms and authenticated browser requests, consider:
+- OWASP Cross-Site Request Forgery Prevention Cheat Sheet
+
+Verify:
+- anti-CSRF tokens where applicable;
+- SameSite cookie protection;
+- origin or referer validation when appropriate;
+- safe state-changing HTTP methods;
+- protection of authenticated actions.
+
+6. File Upload
+For file-upload scenarios, consider:
+- OWASP File Upload Cheat Sheet
+- OWASP Input Validation Cheat Sheet
+
+Verify:
+- extension allow-listing;
+- MIME/type validation;
+- file signature validation where appropriate;
+- generated safe filenames;
+- upload size limits;
+- storage outside the public web root when appropriate;
+- authorization;
+- malware scanning or sandboxing when required by the risk level.
+
+7. Security Headers and Browser Protection
+For web applications, consider:
+- OWASP HTTP Headers Cheat Sheet
+
+Apply relevant protections such as:
+- Content-Security-Policy;
+- X-Content-Type-Options;
+- frame protection;
+- Referrer-Policy;
+- appropriate HSTS configuration when HTTPS is deployed.
+
+8. Logging and Monitoring
+When security-relevant events are present, consider:
+- OWASP Logging Cheat Sheet
+
+Log important security events without exposing:
+- passwords;
+- authentication tokens;
+- session identifiers;
+- cryptographic secrets;
+- unnecessary sensitive personal data.
+
+Implementation requirements:
+
+1. Determine which OWASP recommendations are relevant to the selected scenario.
+2. Apply those recommendations directly in the generated implementation.
+3. Do not add unrelated security mechanisms merely to satisfy a checklist.
+4. Explain which OWASP recommendations were applied and why.
+5. Identify important recommendations that require infrastructure or deployment configuration and therefore cannot be fully implemented in source code alone.
+6. Never invent OWASP requirements or claim compliance with guidance that was not actually applied.

@@ -1,7 +1,9 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 
 import { buildPrompt } from "../utils/promptBuilder";
+import { getOwaspResourcesForScenario } from "../strategies/owasp/owaspScenarioResources";
+import { fetchOwaspContext } from "../services/owaspContextService";
 import { runPromptChain } from "../utils/promptChain";
 import MarkdownRenderer from "../components/MarkdownRenderer";
 import { exportAuditReport } from "../utils/pdfExporter";
@@ -81,6 +83,10 @@ export default function Dashboard() {
 
   const getSelectedInteractiveConfig = () =>
     getInteractiveStrategyConfig(selectedStrategy?.title);
+
+  const isSelectedOwaspCompliance = () =>
+    selectedStrategy?.title?.trim().toLowerCase() ===
+    "owasp compliance";
 
   const getTime = () =>
     new Date().toLocaleTimeString([], {
@@ -525,11 +531,48 @@ ${selectedScenario?.prompt || ""}
 ${displayedUserContent}
 `;
         } else {
+          let owaspContext = "";
+
+          if (isSelectedOwaspCompliance()) {
+            try {
+              const owaspResources =
+                getOwaspResourcesForScenario(selectedScenario);
+
+              if (owaspResources.length > 0) {
+                console.log(
+                  "Loading real OWASP resources:",
+                  owaspResources.map((resource) => resource.title),
+                );
+
+                const owaspResult =
+                  await fetchOwaspContext(owaspResources);
+
+                owaspContext = owaspResult.context || "";
+
+                console.log(
+                  "OWASP context loaded:",
+                  owaspContext.length,
+                  "characters",
+                );
+              } else {
+                console.warn(
+                  "No OWASP resources mapped to selected scenario.",
+                );
+              }
+            } catch (owaspError) {
+              console.error(
+                "Unable to load OWASP context:",
+                owaspError,
+              );
+            }
+          }
+
           promptToSend = buildPrompt({
             mode: currentMode,
             scenario: selectedScenario,
             strategy: selectedStrategy,
             userInput: trimmedInput,
+            owaspContext,
           });
         }
       } else {
