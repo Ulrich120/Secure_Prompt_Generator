@@ -1,6 +1,7 @@
-fastapi
+﻿fastapi
 uvicorn
 python-dotenv
 requests
 python-multipart
 sqlalchemy
+beautifulsoup4
